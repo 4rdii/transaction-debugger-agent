@@ -1,0 +1,175 @@
+.view {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.header {
+  padding: 20px 0 16px;
+  border-bottom: 1px solid #21262d;
+  margin-bottom: 24px;
+}
+
+.statusRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.successBadge {
+  padding: 3px 10px;
+  background: rgba(63, 185, 80, 0.15);
+  border: 1px solid #3fb950;
+  border-radius: 20px;
+  color: #3fb950;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.failBadge {
+  padding: 3px 10px;
+  background: rgba(248, 81, 73, 0.15);
+  border: 1px solid #f85149;
+  border-radius: 20px;
+  color: #f85149;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.meta {
+  color: #8b949e;
+  font-size: 12px;
+}
+
+.hash {
+  font-size: 12px;
+  color: #8b949e;
+  word-break: break-all;
+}
+
+.section {
+  padding: 20px 0;
+  border-bottom: 1px solid #21262d;
+}
+
+.section:last-child {
+  border-bottom: none;
+}
+
+.sectionTitle {
+  margin: 0 0 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.explanation {
+  margin: 0;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #c9d1d9;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 6px;
+  padding: 16px;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.actionType {
+  font-weight: 700;
+  color: #d2a8ff;
+  flex-shrink: 0;
+}
+
+.actionProtocol {
+  color: #f78166;
+  font-size: 11px;
+  background: rgba(247, 129, 102, 0.1);
+  border: 1px solid rgba(247, 129, 102, 0.3);
+  border-radius: 3px;
+  padding: 1px 6px;
+  flex-shrink: 0;
+}
+
+.actionDesc {
+  color: #8b949e;
+}
+
+.failureBox {
+  background: rgba(248, 81, 73, 0.05);
+  border: 1px solid rgba(248, 81, 73, 0.3);
+  border-radius: 6px;
+  padding: 14px 16px;
+}
+
+.failureReason {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f85149;
+  margin-bottom: 8px;
+}
+
+.failureExplanation {
+  font-size: 13px;
+  color: #c9d1d9;
+  line-height: 1.6;
+}
+
+.risks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.risk {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-left-width: 3px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.riskLevel {
+  font-weight: 700;
+  font-size: 10px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.riskType {
+  font-weight: 600;
+  color: #e6edf3;
+  flex-shrink: 0;
+  font-size: 12px;
+}
+
+.riskDesc {
+  color: #8b949e;
+  line-height: 1.5;
+}
