@@ -30,7 +30,7 @@ COPY tsconfig.json ./
 COPY packages/shared/  ./packages/shared/
 COPY packages/backend/ ./packages/backend/
 
-RUN npm run build -w packages/shared && npm run build -w packages/backend
+RUN npm run build -w packages/backend
 
 ENV NODE_ENV=production
 ENV PORT=3001
