@@ -215,7 +215,7 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
           address: { type: 'string', description: 'Contract address (0x...)' },
           networkId: {
             type: 'number',
-            description: 'Network ID (1=Ethereum, 137=Polygon, 42161=Arbitrum, 10=Optimism, 8453=Base)',
+            description: 'Network ID (1=Ethereum, 56=BSC, 137=Polygon, 10=Optimism, 42161=Arbitrum, 8453=Base, 43114=Avalanche, 59144=Linea, 324=zkSync, 81457=Blast, 534352=Scroll, 250=Fantom, 100=Gnosis, 80094=Berachain)',
           },
         },
         required: ['address', 'networkId'],
@@ -545,13 +545,20 @@ Final answer format:
 **Failure analysis**: (omit this section entirely if the transaction succeeded)`;
 
 const NETWORK_NAMES: Record<number, string> = {
-  1:     'Ethereum Mainnet',
-  137:   'Polygon',
-  42161: 'Arbitrum One',
-  10:    'Optimism',
-  8453:  'Base',
-  59144: 'Linea',
-  80094: 'Berachain',
+  1:      'Ethereum Mainnet',
+  56:     'BNB Smart Chain',
+  100:    'Gnosis',
+  137:    'Polygon',
+  250:    'Fantom',
+  324:    'zkSync Era',
+  8453:   'Base',
+  10:     'Optimism',
+  42161:  'Arbitrum One',
+  43114:  'Avalanche C-Chain',
+  59144:  'Linea',
+  80094:  'Berachain',
+  81457:  'Blast',
+  534352: 'Scroll',
 };
 
 function buildInitialMessage(state: AgentState): string {
