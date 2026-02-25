@@ -2,9 +2,10 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "outDir": "./dist",
+    "rootDir": "./src",
     "paths": {
-      "@debugger/shared": ["../shared/src/types/index.ts"]
+      "@debugger/shared": ["../shared/src/types/index.d.ts"]
     }
   },
-  "include": ["src", "../shared/src"]
+  "include": ["src"]
 }
