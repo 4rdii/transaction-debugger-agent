@@ -347,7 +347,7 @@ async function executeTool(
       const revertPath = findRevertPath(state.callTree);
       const revertPathIds = new Set(revertPath);
       const revertOriginId = revertPath.at(-1) ?? '';
-      const lines = buildCallTreeText(state.callTree, 0, [], 10, 80, revertPathIds, revertOriginId);
+      const lines = buildCallTreeText(state.callTree, 0, [], 10, Infinity, revertPathIds, revertOriginId);
       return lines.join('\n');
     }
 
@@ -395,7 +395,7 @@ async function executeTool(
       const callId = String(args['callId'] ?? '');
       const node = findCallById(state.callTree, callId);
       if (!node) return `No call found with id: ${callId}`;
-      const lines = buildCallTreeText(node, 0, [], 4, 40, new Set(), '');
+      const lines = buildCallTreeText(node, 0, [], 10, Infinity, new Set(), '');
       return lines.join('\n');
     }
 
