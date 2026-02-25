@@ -8,8 +8,9 @@ import { errorHandler } from './middleware/error.middleware.js';
 
 const app = express();
 
-app.use(cors({ origin: 'http://localhost:5173' }));
-app.use(express.json());
+const corsOrigin = process.env['CORS_ORIGIN'] ?? 'http://localhost:5173';
+app.use(cors({ origin: corsOrigin === '*' ? true : corsOrigin }));
+app.use(express.json({ limit: '5mb' }));
 
 // Health check
 app.get('/health', (_req, res) => {

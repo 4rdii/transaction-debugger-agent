@@ -1,0 +1,25 @@
+# Dependencies — reinstalled inside the image
+node_modules
+packages/*/node_modules
+
+# Build artifacts — rebuilt inside the image
+packages/*/dist
+packages/frontend/dist
+
+# Env files — injected at runtime via docker-compose or -e flags
+.env
+packages/backend/.env
+*.env.local
+
+# Dev/tooling
+.git
+.gitignore
+*.md
+TODO.md
+logs/
+
+# Frontend — deployed to Vercel, not needed in the backend image
+packages/frontend/src
+packages/frontend/public
+packages/frontend/index.html
+packages/frontend/vite.config.ts

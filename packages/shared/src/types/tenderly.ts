@@ -87,12 +87,24 @@ export interface TenderlyStateDiff {
   dirty: string;
 }
 
+export interface TenderlyStackFrame {
+  contract: string;
+  contract_name?: string;
+  name: string;
+  line: number;
+  file_index?: number;
+  code?: string;
+  error?: string;
+  error_reason?: string;
+}
+
 export interface TenderlyTransactionInfo {
   call_trace: TenderlyCallTrace;
   asset_changes?: TenderlyAssetChange[];
   state_diff?: TenderlyStateDiff[];
   logs?: TenderlyCallLog[];
   balance_diff?: TenderlyBalanceDiff[];
+  stack_trace?: TenderlyStackFrame[];
 }
 
 export interface TenderlyTransaction {

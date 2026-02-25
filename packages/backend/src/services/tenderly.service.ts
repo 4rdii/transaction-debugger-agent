@@ -4,27 +4,11 @@ import type { RawTxParams } from './ethers.service.js';
 
 const BASE_URL = 'https://api.tenderly.co/api/v1';
 
-export async function simulateTransaction(
-  params: RawTxParams,
-  networkId: string
+async function callSimulate(
+  body: Record<string, unknown>
 ): Promise<TenderlySimulateResponse> {
   const { accountSlug, projectSlug, accessKey } = config.tenderly;
   const url = `${BASE_URL}/account/${accountSlug}/project/${projectSlug}/simulate`;
-
-  const body = {
-    network_id: networkId,
-    block_number: params.blockNumber - 1, // simulate at the block before inclusion
-    from: params.from,
-    to: params.to,
-    input: params.input,
-    gas: params.gas,
-    gas_price: params.gasPrice,
-    value: params.value,
-    save: true,
-    save_if_fails: true,
-    simulation_type: 'full',
-    generate_access_list: false,
-  };
 
   const response = await fetch(url, {
     method: 'POST',
@@ -47,4 +31,48 @@ export async function simulateTransaction(
   }
 
   return data;
+}
+
+export async function simulateTransaction(
+  params: RawTxParams,
+  networkId: string
+): Promise<TenderlySimulateResponse> {
+  return callSimulate({
+    network_id: networkId,
+    block_number: params.blockNumber - 1,
+    from: params.from,
+    to: params.to,
+    input: params.input,
+    gas: params.gas,
+    gas_price: params.gasPrice,
+    value: params.value,
+    save: true,
+    save_if_fails: true,
+    simulation_type: 'full',
+    generate_access_list: false,
+  });
+}
+
+/** Re-simulate with Tenderly state_objects overrides (storage slots, ETH balances). */
+export async function simulateWithOverrides(
+  params: RawTxParams,
+  networkId: string,
+  gasOverride: number | null,
+  stateObjects: Record<string, unknown>
+): Promise<TenderlySimulateResponse> {
+  return callSimulate({
+    network_id: networkId,
+    block_number: params.blockNumber - 1,
+    from: params.from,
+    to: params.to,
+    input: params.input,
+    gas: gasOverride ?? params.gas,
+    gas_price: params.gasPrice,
+    value: params.value,
+    save: false,
+    save_if_fails: false,
+    simulation_type: 'full',
+    generate_access_list: false,
+    ...(Object.keys(stateObjects).length > 0 ? { state_objects: stateObjects } : {}),
+  });
 }

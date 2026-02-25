@@ -25,6 +25,9 @@ export const config = {
     baseURL: 'https://openrouter.ai/api/v1',
     model: process.env['LLM_MODEL'] ?? 'openai/gpt-4o',
   },
+  etherscan: {
+    apiKey: process.env['ETHERSCAN_API_KEY'] ?? '',
+  },
   port: parseInt(process.env['PORT'] ?? '3001', 10),
   rpcUrls: {
     '1':     process.env['RPC_URL_1']     ?? 'https://eth.llamarpc.com',
@@ -32,6 +35,8 @@ export const config = {
     '42161': process.env['RPC_URL_42161'] ?? 'https://arbitrum.llamarpc.com',
     '10':    process.env['RPC_URL_10']    ?? 'https://optimism.llamarpc.com',
     '8453':  process.env['RPC_URL_8453']  ?? 'https://base.llamarpc.com',
+    '59144': process.env['RPC_URL_59144'] ?? 'https://rpc.linea.build',
+    '80094': process.env['RPC_URL_80094'] ?? 'https://rpc.berachain.com',
   } as Record<string, string>,
 };
 

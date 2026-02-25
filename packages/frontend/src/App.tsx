@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { AnalysisContext, useAnalysisReducer } from './store/analysis.store.js';
 import { TxInput } from './components/TxInput/TxInput.js';
 import { AnalysisView } from './components/AnalysisView/AnalysisView.js';
+import { ProgressLog } from './components/ProgressLog/ProgressLog.js';
 import styles from './App.module.css';
 
 export function App() {
@@ -27,10 +28,7 @@ export function App() {
           </div>
 
           {state.loading && (
-            <div className={styles.loading}>
-              <div className={styles.spinner} />
-              <span>Fetching trace, simulating, and reasoning...</span>
-            </div>
+            <ProgressLog entries={state.progressLog} />
           )}
 
           {state.error && !state.loading && (
