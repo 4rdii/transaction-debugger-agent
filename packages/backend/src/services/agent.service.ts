@@ -347,7 +347,7 @@ async function executeTool(
       const revertPath = findRevertPath(state.callTree);
       const revertPathIds = new Set(revertPath);
       const revertOriginId = revertPath.at(-1) ?? '';
-      const lines = buildCallTreeText(state.callTree, 0, [], 6, 80, revertPathIds, revertOriginId);
+      const lines = buildCallTreeText(state.callTree, 0, [], 10, 80, revertPathIds, revertOriginId);
       return lines.join('\n');
     }
 
