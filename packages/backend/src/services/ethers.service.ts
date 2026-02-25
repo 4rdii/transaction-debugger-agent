@@ -14,7 +14,7 @@ export interface RawTxParams {
 
 export async function fetchTxParams(txHash: string, networkId: string): Promise<RawTxParams> {
   const rpcUrl = getRpcUrl(networkId);
-  const provider = new ethers.JsonRpcProvider(rpcUrl);
+  const provider = new ethers.JsonRpcProvider(rpcUrl, Number(networkId), { staticNetwork: true });
 
   const tx = await provider.getTransaction(txHash);
   if (!tx) throw new Error(`Transaction ${txHash} not found on network ${networkId}`);
