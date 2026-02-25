@@ -11,33 +11,15 @@ export interface ContractSource {
   files: SourceFile[];
 }
 
-// Chains with their own explorer API endpoints
-const EXPLORER_BASE_URLS: Record<number, string> = {
-  1:     'https://api.etherscan.io',
-  137:   'https://api.polygonscan.com',
-  42161: 'https://api.arbiscan.io',
-  10:    'https://api-optimistic.etherscan.io',
-  8453:  'https://api.basescan.org',
-  59144: 'https://api.lineascan.build',
-};
-
-// Chains that use the Etherscan V2 unified API (single key, chainid param)
+// All chains use the Etherscan V2 unified API (single key, chainid param)
 // https://api.etherscan.io/v2/api?chainid=<id>&...&apikey=<etherscan_key>
-const ETHERSCAN_V2_CHAIN_IDS = new Set([80094]);
-
 function buildApiUrl(
   networkId: number,
   params: Record<string, string>,
   apiKey: string,
-): string | null {
-  if (ETHERSCAN_V2_CHAIN_IDS.has(networkId)) {
-    const q = new URLSearchParams({ chainid: String(networkId), ...params, apikey: apiKey });
-    return `https://api.etherscan.io/v2/api?${q}`;
-  }
-  const base = EXPLORER_BASE_URLS[networkId];
-  if (!base) return null;
-  const q = new URLSearchParams({ ...params, apikey: apiKey });
-  return `${base}/api?${q}`;
+): string {
+  const q = new URLSearchParams({ chainid: String(networkId), ...params, apikey: apiKey });
+  return `https://api.etherscan.io/v2/api?${q}`;
 }
 
 export async function getContractAbi(address: string, networkId: number): Promise<string> {
@@ -45,7 +27,6 @@ export async function getContractAbi(address: string, networkId: number): Promis
   if (!apiKey) return 'ETHERSCAN_API_KEY not configured — ABI lookup unavailable.';
 
   const url = buildApiUrl(networkId, { module: 'contract', action: 'getabi', address }, apiKey);
-  if (!url) return `ABI lookup not supported for network ${networkId}.`;
 
   try {
     const res = await fetch(url);
@@ -99,8 +80,6 @@ export async function getContractSource(
     { module: 'contract', action: 'getsourcecode', address },
     apiKey,
   );
-  if (!url) return `Source lookup not supported for network ${networkId}.`;
-
   try {
     const res = await fetch(url);
     const data = await res.json() as {
@@ -110,7 +89,7 @@ export async function getContractSource(
     };
 
     if (data.status !== '1' || !data.result?.length) {
-      return `Source not available for ${address}: ${data.message}`;
+      return `Source not available for ${address}: ${data.message} — ${Array.isArray(data.result) ? JSON.stringify(data.result) : data.result}`;
     }
 
     const entry = data.result[0] as Record<string, string>;
