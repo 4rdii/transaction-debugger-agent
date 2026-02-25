@@ -9,7 +9,10 @@ RUN apk add --no-cache curl bash git
 WORKDIR /app
 
 # Install Foundry (provides `cast` for on-chain queries)
-RUN curl -L https://foundry.paradigm.xyz | bash
+# The installer exits 1 in non-interactive shells when it can't detect $SHELL — ignore it,
+# foundryup binary is still written to ~/.foundry/bin/
+ENV SHELL=/bin/bash
+RUN curl -L https://foundry.paradigm.xyz | bash || true
 ENV PATH="/root/.foundry/bin:${PATH}"
 RUN foundryup
 
