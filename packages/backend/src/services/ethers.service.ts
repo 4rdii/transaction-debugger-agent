@@ -10,6 +10,9 @@ export interface RawTxParams {
   value: number;
   blockNumber: number;
   nonce: number;
+  /** On-chain receipt status: 1 = success, 0 = reverted */
+  onChainStatus: boolean;
+  gasUsed: number;
 }
 
 export async function fetchTxParams(txHash: string, networkId: string): Promise<RawTxParams> {
@@ -31,5 +34,7 @@ export async function fetchTxParams(txHash: string, networkId: string): Promise<
     value: Number(tx.value),
     blockNumber: receipt.blockNumber,
     nonce: tx.nonce,
+    onChainStatus: receipt.status === 1,
+    gasUsed: Number(receipt.gasUsed),
   };
 }
