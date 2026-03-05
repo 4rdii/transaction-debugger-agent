@@ -10,8 +10,9 @@ import { errorHandler } from './middleware/error.middleware.js';
 
 const app = express();
 
-const corsOrigin = process.env['CORS_ORIGIN'] ?? 'http://localhost:5173';
-app.use(cors({ origin: corsOrigin === '*' ? true : corsOrigin }));
+const corsEnv = process.env['CORS_ORIGIN'] ?? 'http://localhost:5173';
+const corsOrigin = corsEnv === '*' ? true : corsEnv.split(',').map(s => s.trim());
+app.use(cors({ origin: corsOrigin }));
 app.use(express.json({ limit: '5mb' }));
 
 // Rate limiting — prevents runaway API costs from Tenderly/OpenRouter

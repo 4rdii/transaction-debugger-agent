@@ -12,6 +12,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
     "@debugger/shared": "*",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",

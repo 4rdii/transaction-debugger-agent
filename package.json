@@ -5,7 +5,8 @@
   "scripts": {
     "dev:backend": "npm run dev -w packages/backend",
     "dev:frontend": "npm run dev -w packages/frontend",
-    "build": "npm run build -w packages/shared && npm run build -w packages/backend && npm run build -w packages/frontend",
+    "dev:mcp": "npm run dev -w packages/mcp",
+    "build": "npm run build -w packages/shared && npm run build -w packages/backend && npm run build -w packages/frontend && npm run build -w packages/mcp",
     "typecheck": "npm run typecheck -w packages/backend && npm run typecheck -w packages/frontend",
     "test": "npm run test -w packages/backend"
   }
