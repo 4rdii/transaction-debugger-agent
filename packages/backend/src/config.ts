@@ -14,6 +14,14 @@ function require_env(name: string): string {
   return val;
 }
 
+/** Lazy getter — only throws when the value is actually read, not at import time. */
+function lazy_env(name: string): { toString(): string; valueOf(): string } {
+  return {
+    toString() { return require_env(name); },
+    valueOf()  { return require_env(name); },
+  };
+}
+
 const alchemyKey = process.env['ALCHEMY_API_KEY'];
 
 /**
@@ -29,12 +37,12 @@ function rpc(chainId: string, alchemySubdomain: string | null, publicFallback: s
 
 export const config = {
   tenderly: {
-    accessKey: require_env('TENDERLY_ACCESS_KEY'),
-    accountSlug: require_env('TENDERLY_ACCOUNT_SLUG'),
-    projectSlug: require_env('TENDERLY_PROJECT_SLUG'),
+    accessKey: lazy_env('TENDERLY_ACCESS_KEY') as unknown as string,
+    accountSlug: lazy_env('TENDERLY_ACCOUNT_SLUG') as unknown as string,
+    projectSlug: lazy_env('TENDERLY_PROJECT_SLUG') as unknown as string,
   },
   openrouter: {
-    apiKey: require_env('OPEN_ROUTER_API_KEY'),
+    apiKey: lazy_env('OPEN_ROUTER_API_KEY') as unknown as string,
     baseURL: 'https://openrouter.ai/api/v1',
     model: process.env['LLM_MODEL'] ?? 'openai/gpt-4o',
   },
