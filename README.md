@@ -144,6 +144,40 @@ solana-tokenflow — extract token transfers and balance changes
 Solana agent loop → final analysis
 ```
 
+## MCP Server (Claude Code Integration)
+
+The debugger can be used as an MCP tool directly inside [Claude Code](https://claude.com/claude-code). Instead of the web UI, Claude analyzes transactions itself using the raw call tree, token flows, and risk flags.
+
+### Setup
+
+```bash
+# Register the MCP server with Claude Code
+claude mcp add debugger -- npx tsx packages/mcp/src/index.ts
+```
+
+Make sure your `.env` is configured (same keys as above). The MCP server imports backend services directly — it does **not** call your backend HTTP API.
+
+### Available Tools
+
+| Tool | Description |
+|---|---|
+| `debug_transaction` | Full debug pipeline: call tree, token flows, risk flags, failure analysis — returned as structured text for Claude to interpret |
+| `get_call_tree` | Fetch only the call trace (no LLM, no token flows) |
+| `get_token_flows` | Fetch only token transfers and balance changes |
+| `get_risk_flags` | Fetch only risk/security flags |
+| `resolve_rango_swap` | Look up a Rango cross-chain swap by its UUID — returns route steps and per-step tx hashes |
+
+### Usage
+
+Once registered, just ask Claude Code to debug a transaction:
+
+```
+> debug 0xabc123... on ethereum
+> what happened in this rango swap 87e03b2b-759c-460c-9997-0bc2a4cf994b
+```
+
+Claude will call the appropriate MCP tools and analyze the results.
+
 ## Project Structure
 
 ```
