@@ -22,6 +22,12 @@
 - [ ] **Multi-chain RPC fallback** — try secondary RPC if primary fails; add Berachain public RPC
 
 ## Completed
+- [x] **Solana transaction support** — RPC fetching, instruction normalizer, IDL decoding, token flow extraction, known-program registry, error registry, and dedicated Solana agent service
+- [x] **Rango cross-chain swap integration** — resolve Rango swap IDs to multi-step bridge/swap overviews via `/api/rango/resolve`
+- [x] **Rango swap UI component** — frontend RangoSwapView for visualizing cross-chain swap steps
+- [x] **OpenAI service** — direct OpenAI API as alternative LLM provider alongside OpenRouter
+- [x] **CI/CD pipeline** — GitHub Actions workflow for automated testing
+- [x] **Unit test suite** — vitest setup with tests for action, cache, failure, normalizer, rango, risk, solana-errors, solana-normalizer, solana-programs, solana-tokenflow, and tokenflow services
 - [x] **SSE progress streaming** — live tool-by-tool activity log shown in the UI during analysis
 - [x] **`get_revert_source_location` tool** — fetches verified Solidity source from Etherscan V2; searches all compilation files by function name; returns only files containing the matching definition
 - [x] **Berachain support (chain 80094)** — routes Etherscan queries through V2 API (`api.etherscan.io/v2/api?chainid=80094`)
