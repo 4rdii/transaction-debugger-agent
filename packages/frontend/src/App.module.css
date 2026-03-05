@@ -28,6 +28,35 @@
   color: #e6edf3;
 }
 
+.nav {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.navBtn {
+  padding: 6px 14px;
+  background: transparent;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  color: #8b949e;
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.navBtn:hover {
+  color: #e6edf3;
+  border-color: #484f58;
+}
+
+.navActive {
+  background: #21262d;
+  color: #e6edf3;
+  border-color: #388bfd;
+}
+
 .tagline {
   margin: 0;
   font-size: 13px;

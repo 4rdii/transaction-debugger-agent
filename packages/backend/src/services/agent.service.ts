@@ -11,6 +11,7 @@ import type {
   TenderlySimulateResponse,
 } from '@debugger/shared';
 import { config } from '../config.js';
+import { getOpenAI } from './openai.service.js';
 import { extractTokenFlows } from './tokenflow.service.js';
 import { detectSemanticActions } from './action.service.js';
 import { analyzeFailure } from './failure.service.js';
@@ -24,24 +25,6 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const LOGS_DIR = resolve(__dirname, '../../../logs');
 
 const MAX_TURNS = 12;
-
-// ─── OpenAI client ────────────────────────────────────────────────────────────
-
-let openaiClient: OpenAI | null = null;
-
-function getOpenAI(): OpenAI {
-  if (!openaiClient) {
-    openaiClient = new OpenAI({
-      apiKey: config.openrouter.apiKey,
-      baseURL: config.openrouter.baseURL,
-      defaultHeaders: {
-        'HTTP-Referer': 'https://github.com/ai-tx-debugger',
-        'X-Title': 'AI Transaction Debugger',
-      },
-    });
-  }
-  return openaiClient;
-}
 
 // ─── Agent state ──────────────────────────────────────────────────────────────
 
@@ -715,7 +698,7 @@ export async function runAnalysisAgent(
       tools: TOOLS,
       messages,
       temperature: 0.3,
-      max_tokens: 1500,
+      max_tokens: 4096,
     });
 
     const msg = response.choices[0]?.message;

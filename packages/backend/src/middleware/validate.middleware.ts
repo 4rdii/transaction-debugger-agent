@@ -17,8 +17,8 @@ export function validate<T>(schema: ZodSchema<T>) {
 }
 
 export const DebugRequestSchema = z.object({
-  txHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/, 'Invalid transaction hash (must be 0x + 64 hex chars)'),
-  networkId: z.string().regex(/^\d+$/, 'networkId must be a numeric string'),
+  txHash: z.string().min(32).max(128),
+  networkId: z.string().min(1),
 });
 
 export const QARequestSchema = z.object({

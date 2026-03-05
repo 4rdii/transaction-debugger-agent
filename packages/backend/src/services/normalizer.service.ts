@@ -1,12 +1,6 @@
 import type { TenderlyCallTrace, NormalizedCall, DecodedParam } from '@debugger/shared';
 import { lookupSelector } from '../registry/selectors.js';
 
-let callCounter = 0;
-
-function resetCounter() {
-  callCounter = 0;
-}
-
 function extractSelector(input: string): string | undefined {
   if (input && input.length >= 10) return input.slice(0, 10).toLowerCase();
   return undefined;
@@ -34,8 +28,8 @@ function mapDecodedParams(params?: Array<{ name: string; type: string; value?: u
   }));
 }
 
-function normalizeCall(trace: TenderlyCallTrace, depth: number): NormalizedCall {
-  const id = `call-${callCounter++}`;
+function normalizeCall(trace: TenderlyCallTrace, depth: number, counter: { value: number }): NormalizedCall {
+  const id = `call-${counter.value++}`;
   const selector = extractSelector(trace.input);
   const selectorInfo = selector ? lookupSelector(selector) : undefined;
 
@@ -60,13 +54,13 @@ function normalizeCall(trace: TenderlyCallTrace, depth: number): NormalizedCall 
   };
 
   if (trace.calls && trace.calls.length > 0) {
-    normalized.children = trace.calls.map(child => normalizeCall(child, depth + 1));
+    normalized.children = trace.calls.map(child => normalizeCall(child, depth + 1, counter));
   }
 
   return normalized;
 }
 
 export function normalizeCallTrace(rootTrace: TenderlyCallTrace): NormalizedCall {
-  resetCounter();
-  return normalizeCall(rootTrace, 0);
+  const counter = { value: 0 };
+  return normalizeCall(rootTrace, 0, counter);
 }

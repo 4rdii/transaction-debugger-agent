@@ -1,4 +1,4 @@
-import type { DebugRequest, DebugResponse, QARequest, QAResponse } from '@debugger/shared';
+import type { DebugRequest, DebugResponse, QARequest, QAResponse, RangoResolveResponse } from '@debugger/shared';
 
 // In dev, VITE_API_URL is unset so relative paths are used (proxied by Vite to localhost:3001).
 // In production (Vercel), set VITE_API_URL=https://your-server.com:3001
@@ -60,4 +60,8 @@ export function streamDebugTransaction(
 
 export async function askQuestion(req: QARequest): Promise<QAResponse> {
   return apiFetch<QAResponse>('/api/qa', req);
+}
+
+export async function resolveRangoSwap(swapId: string): Promise<RangoResolveResponse> {
+  return apiFetch<RangoResolveResponse>('/api/rango/resolve', { swapId });
 }

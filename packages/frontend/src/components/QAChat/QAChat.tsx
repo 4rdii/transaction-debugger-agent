@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, useRef, type FormEvent } from 'react';
 import { useAnalysis } from '../../store/analysis.store.js';
 import { askQuestion } from '../../api/client.js';
 import styles from './QAChat.module.css';
@@ -14,6 +14,12 @@ const SUGGESTED_QUESTIONS = [
 export function QAChat() {
   const { state, dispatch } = useAnalysis();
   const [question, setQuestion] = useState('');
+  const historyEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom when new QA items are added
+  useEffect(() => {
+    historyEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [state.qaHistory.length]);
 
   if (!state.result) return null;
 
@@ -47,7 +53,7 @@ export function QAChat() {
       {state.qaHistory.length > 0 && (
         <div className={styles.history}>
           {state.qaHistory.map((item, i) => (
-            <div key={i} className={styles.qaItem}>
+            <div key={`qa-${i}-${item.question.slice(0, 20)}`} className={styles.qaItem}>
               <div className={styles.question}>
                 <span className={styles.qLabel}>Q</span>
                 {item.question}
@@ -58,7 +64,12 @@ export function QAChat() {
               </div>
             </div>
           ))}
+          <div ref={historyEndRef} />
         </div>
+      )}
+
+      {state.qaError && (
+        <div className={styles.error}>{state.qaError}</div>
       )}
 
       <div className={styles.suggestions}>

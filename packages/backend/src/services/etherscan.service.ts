@@ -29,7 +29,7 @@ export async function getContractAbi(address: string, networkId: number): Promis
   const url = buildApiUrl(networkId, { module: 'contract', action: 'getabi', address }, apiKey);
 
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
     const data = await res.json() as { status: string; result: string; message: string };
 
     if (data.status !== '1') {
@@ -81,7 +81,7 @@ export async function getContractSource(
     apiKey,
   );
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
     const data = await res.json() as {
       status: string;
       message: string;

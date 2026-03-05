@@ -11,9 +11,18 @@ function flattenCalls(node: NormalizedCall): NormalizedCall[] {
   return [node, ...node.children.flatMap(flattenCalls)];
 }
 
-function getTokensInvolved(callId: string, tokenFlows: TokenFlow[]): string[] {
-  // Returns unique token symbols involved in flows
-  return [...new Set(tokenFlows.map(f => f.tokenSymbol))];
+function getSubtreeAddresses(node: NormalizedCall): Set<string> {
+  const addrs = new Set<string>([node.caller, node.callee]);
+  for (const child of node.children) {
+    for (const addr of getSubtreeAddresses(child)) addrs.add(addr);
+  }
+  return addrs;
+}
+
+function getTokensInvolved(call: NormalizedCall, tokenFlows: TokenFlow[]): string[] {
+  const addrs = getSubtreeAddresses(call);
+  const relevant = tokenFlows.filter(f => addrs.has(f.from) || addrs.has(f.to));
+  return [...new Set(relevant.map(f => f.tokenSymbol))];
 }
 
 function getAddressesInvolved(call: NormalizedCall): string[] {
@@ -144,7 +153,7 @@ function detectDepositWithdraw(call: NormalizedCall, tokenFlows: TokenFlow[]): S
       protocol: call.protocol ?? call.contractName,
       callId: call.id,
       description: `Deposit/supply to ${call.contractName ?? call.callee}`,
-      involvedTokens: getTokensInvolved(call.id, tokenFlows),
+      involvedTokens: getTokensInvolved(call, tokenFlows),
       involvedAddresses: getAddressesInvolved(call),
     };
   }
@@ -155,7 +164,7 @@ function detectDepositWithdraw(call: NormalizedCall, tokenFlows: TokenFlow[]): S
       protocol: call.protocol ?? call.contractName,
       callId: call.id,
       description: `Withdrawal from ${call.contractName ?? call.callee}`,
-      involvedTokens: getTokensInvolved(call.id, tokenFlows),
+      involvedTokens: getTokensInvolved(call, tokenFlows),
       involvedAddresses: getAddressesInvolved(call),
     };
   }

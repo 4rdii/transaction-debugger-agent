@@ -7,17 +7,165 @@ import { normalizeCallTrace } from '../services/normalizer.service.js';
 import { runAnalysisAgent } from '../services/agent.service.js';
 import type { AgentProgressEvent } from '../services/agent.service.js';
 import { getCached, setCached } from '../services/cache.service.js';
+import { isSolanaNetwork } from '../config.js';
+import { fetchSolanaTransaction } from '../services/solana-rpc.service.js';
+import { normalizeSolanaTransaction } from '../services/solana-normalizer.service.js';
+import { runSolanaAnalysisAgent } from '../services/solana-agent.service.js';
 import type { AnalysisResult } from '@debugger/shared';
 
 export const debugRouter = Router();
+
+// ─── Shared analysis pipeline ─────────────────────────────────────────────────
+
+type StepCallback = (msg: string) => void;
+type ProgressCallback = (event: AgentProgressEvent) => void;
+
+async function runSolanaPipeline(
+  txHash: string,
+  networkId: string,
+  onStep?: StepCallback,
+  onAgentProgress?: ProgressCallback,
+): Promise<AnalysisResult> {
+  const cached = getCached(txHash, networkId);
+  if (cached) {
+    onStep?.('Loaded from cache.');
+    return cached;
+  }
+
+  onStep?.('Fetching Solana transaction...');
+  const txData = await fetchSolanaTransaction(txHash, networkId);
+
+  onStep?.('Normalizing instruction tree...');
+  const callTree = normalizeSolanaTransaction(txData);
+
+  onStep?.('Starting Solana AI agent...');
+  const agentResult = await runSolanaAnalysisAgent(
+    {
+      signature: txHash,
+      networkId,
+      success: txData.success,
+      computeUnitsConsumed: txData.computeUnitsConsumed,
+      slot: txData.slot,
+      fee: txData.fee,
+      callTree,
+      txData,
+      tokenFlows: [],
+      semanticActions: [],
+      riskFlags: [],
+      failureReason: undefined,
+    },
+    onAgentProgress,
+  );
+
+  const result: AnalysisResult = {
+    txHash,
+    networkId,
+    success: agentResult.success,
+    gasUsed: agentResult.computeUnitsConsumed,
+    blockNumber: agentResult.slot,
+    callTree: agentResult.callTree,
+    tokenFlows: agentResult.tokenFlows,
+    semanticActions: agentResult.semanticActions,
+    riskFlags: agentResult.riskFlags,
+    failureReason: agentResult.failureReason,
+    llmExplanation: agentResult.llmExplanation,
+    analyzedAt: new Date().toISOString(),
+  };
+
+  setCached(txHash, networkId, result);
+  return result;
+}
+
+async function runEvmPipeline(
+  txHash: string,
+  networkId: string,
+  onStep?: StepCallback,
+  onAgentProgress?: ProgressCallback,
+): Promise<AnalysisResult> {
+  const cached = getCached(txHash, networkId);
+  if (cached) {
+    onStep?.('Loaded from cache.');
+    return cached;
+  }
+
+  onStep?.('Fetching transaction from RPC...');
+  const txParams = await fetchTxParams(txHash, networkId);
+
+  onStep?.('Simulating on Tenderly...');
+  const simulation = await simulateTransaction(txParams, networkId);
+  const txInfo = simulation.transaction.transaction_info;
+
+  onStep?.('Normalizing call trace...');
+  const callTree = normalizeCallTrace(txInfo.call_trace);
+
+  onStep?.('Starting AI agent...');
+  const agentResult = await runAnalysisAgent(
+    {
+      txHash,
+      networkId: Number(networkId),
+      success: txParams.onChainStatus,
+      gasUsed: txParams.gasUsed,
+      blockNumber: txParams.blockNumber,
+      callTree,
+      simulation,
+      txParams,
+      tokenFlows: [],
+      semanticActions: [],
+      riskFlags: [],
+      failureReason: undefined,
+    },
+    onAgentProgress,
+  );
+
+  const result: AnalysisResult = {
+    txHash,
+    networkId,
+    success: agentResult.success,
+    gasUsed: agentResult.gasUsed,
+    blockNumber: agentResult.blockNumber,
+    callTree: agentResult.callTree,
+    tokenFlows: agentResult.tokenFlows,
+    semanticActions: agentResult.semanticActions,
+    riskFlags: agentResult.riskFlags,
+    failureReason: agentResult.failureReason,
+    llmExplanation: agentResult.llmExplanation,
+    analyzedAt: new Date().toISOString(),
+  };
+
+  setCached(txHash, networkId, result);
+  return result;
+}
+
+async function runPipeline(
+  txHash: string,
+  networkId: string,
+  onStep?: StepCallback,
+  onAgentProgress?: ProgressCallback,
+): Promise<AnalysisResult> {
+  if (isSolanaNetwork(networkId)) {
+    return runSolanaPipeline(txHash, networkId, onStep, onAgentProgress);
+  }
+  return runEvmPipeline(txHash, networkId, onStep, onAgentProgress);
+}
 
 // ─── SSE streaming endpoint ───────────────────────────────────────────────────
 
 debugRouter.get('/stream', async (req: Request, res: Response) => {
   const { txHash, networkId } = req.query as { txHash?: string; networkId?: string };
 
-  if (!txHash?.match(/^0x[0-9a-fA-F]{64}$/) || !networkId) {
-    res.status(400).json({ error: 'Invalid txHash or networkId' });
+  if (!txHash || !networkId) {
+    res.status(400).json({ error: 'Missing txHash or networkId' });
+    return;
+  }
+
+  // Validate format based on network type
+  const isSolana = isSolanaNetwork(networkId);
+  const isValidHash = isSolana
+    ? /^[1-9A-HJ-NP-Za-km-z]{43,88}$/.test(txHash)
+    : /^0x[0-9a-fA-F]{64}$/.test(txHash);
+
+  if (!isValidHash) {
+    res.status(400).json({ error: isSolana ? 'Invalid Solana signature' : 'Invalid transaction hash' });
     return;
   }
 
@@ -31,73 +179,22 @@ debugRouter.get('/stream', async (req: Request, res: Response) => {
     res.write(`data: ${JSON.stringify(data)}\n\n`);
   }
 
-  // Helper to convert agent events to SSE messages
-  function onAgentProgress(event: AgentProgressEvent) {
-    if (event.type === 'tool_call') {
-      send({ type: 'tool_call', turn: event.turn, toolNames: event.toolNames });
-    } else if (event.type === 'tool_result') {
-      send({ type: 'tool_result', turn: event.turn, toolName: event.toolName, summary: event.summary });
-    } else if (event.type === 'final_answer') {
-      send({ type: 'step', message: 'Writing final analysis...' });
-    }
-  }
-
   try {
-    // Cache hit — still stream a couple of steps for consistency
-    const cached = getCached(txHash, networkId);
-    if (cached) {
-      send({ type: 'step', message: 'Loaded from cache.' });
-      send({ type: 'complete', result: cached });
-      res.end();
-      return;
-    }
-
-    send({ type: 'step', message: 'Fetching transaction from RPC...' });
-    const txParams = await fetchTxParams(txHash, networkId);
-
-    send({ type: 'step', message: 'Simulating on Tenderly...' });
-    const simulation = await simulateTransaction(txParams, networkId);
-    const { transaction } = simulation;
-    const txInfo = transaction.transaction_info;
-
-    send({ type: 'step', message: 'Normalizing call trace...' });
-    const callTree = normalizeCallTrace(txInfo.call_trace);
-
-    send({ type: 'step', message: 'Starting AI agent...' });
-    const agentResult = await runAnalysisAgent(
-      {
-        txHash,
-        networkId: Number(networkId),
-        success: txParams.onChainStatus,
-        gasUsed: txParams.gasUsed,
-        blockNumber: txParams.blockNumber,
-        callTree,
-        simulation,
-        txParams,
-        tokenFlows: [],
-        semanticActions: [],
-        riskFlags: [],
-        failureReason: undefined,
-      },
-      onAgentProgress,
-    );
-
-    const result: AnalysisResult = {
+    const result = await runPipeline(
       txHash,
       networkId,
-      success: agentResult.success,
-      gasUsed: agentResult.gasUsed,
-      blockNumber: agentResult.blockNumber,
-      callTree: agentResult.callTree,
-      tokenFlows: agentResult.tokenFlows,
-      semanticActions: agentResult.semanticActions,
-      riskFlags: agentResult.riskFlags,
-      failureReason: agentResult.failureReason,
-      llmExplanation: agentResult.llmExplanation,
-      analyzedAt: new Date().toISOString(),
-    };
+      msg => send({ type: 'step', message: msg }),
+      event => {
+        if (event.type === 'tool_call') {
+          send({ type: 'tool_call', turn: event.turn, toolNames: event.toolNames });
+        } else if (event.type === 'tool_result') {
+          send({ type: 'tool_result', turn: event.turn, toolName: event.toolName, summary: event.summary });
+        } else if (event.type === 'final_answer') {
+          send({ type: 'step', message: 'Writing final analysis...' });
+        }
+      },
+    );
 
-    setCached(txHash, networkId, result);
     send({ type: 'complete', result });
     res.end();
   } catch (err) {
@@ -106,7 +203,7 @@ debugRouter.get('/stream', async (req: Request, res: Response) => {
   }
 });
 
-// ─── POST endpoint (kept for backward compat) ─────────────────────────────────
+// ─── POST endpoint ────────────────────────────────────────────────────────────
 
 debugRouter.post(
   '/',
@@ -114,64 +211,9 @@ debugRouter.post(
   async (req: Request, res: Response, next: NextFunction) => {
     const { txHash, networkId } = req.body as { txHash: string; networkId: string };
 
-    // Cache hit
-    const cached = getCached(txHash, networkId);
-    if (cached) {
-      res.json({ result: cached });
-      return;
-    }
-
     try {
       console.log(`[debug] Analyzing tx ${txHash} on network ${networkId}`);
-
-      // 1. Fetch tx params from chain
-      console.log('[debug] Fetching tx params from RPC...');
-      const txParams = await fetchTxParams(txHash, networkId);
-
-      // 2. Simulate on Tenderly for rich trace
-      console.log('[debug] Simulating on Tenderly...');
-      const simulation = await simulateTransaction(txParams, networkId);
-      const { transaction } = simulation;
-      const txInfo = transaction.transaction_info;
-
-      // 3. Normalize call trace
-      console.log('[debug] Normalizing call trace...');
-      const callTree = normalizeCallTrace(txInfo.call_trace);
-
-      // 4. Run agent (drives token flow, action, failure, risk analysis + LLM explanation)
-      console.log('[debug] Running analysis agent...');
-      const agentResult = await runAnalysisAgent({
-        txHash,
-        networkId: Number(networkId),
-        success: txParams.onChainStatus,
-        gasUsed: txParams.gasUsed,
-        blockNumber: txParams.blockNumber,
-        callTree,
-        simulation,
-        txParams,
-        tokenFlows: [],
-        semanticActions: [],
-        riskFlags: [],
-        failureReason: undefined,
-      });
-
-      const result: AnalysisResult = {
-        txHash,
-        networkId,
-        success: agentResult.success,
-        gasUsed: agentResult.gasUsed,
-        blockNumber: agentResult.blockNumber,
-        callTree: agentResult.callTree,
-        tokenFlows: agentResult.tokenFlows,
-        semanticActions: agentResult.semanticActions,
-        riskFlags: agentResult.riskFlags,
-        failureReason: agentResult.failureReason,
-        llmExplanation: agentResult.llmExplanation,
-        analyzedAt: new Date().toISOString(),
-      };
-
-      // Cache and return
-      setCached(txHash, networkId, result);
+      const result = await runPipeline(txHash, networkId);
       res.json({ result });
     } catch (err) {
       next(err);

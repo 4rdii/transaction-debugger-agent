@@ -1,6 +1,6 @@
 // Domain types that flow through the backend analysis pipeline
 
-export type CallType = 'CALL' | 'DELEGATECALL' | 'STATICCALL' | 'CREATE' | 'CREATE2';
+export type CallType = 'CALL' | 'DELEGATECALL' | 'STATICCALL' | 'CREATE' | 'CREATE2' | 'INVOKE' | 'CPI';
 
 export interface DecodedParam {
   name: string;

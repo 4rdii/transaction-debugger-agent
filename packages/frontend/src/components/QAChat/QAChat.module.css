@@ -63,6 +63,16 @@
   word-wrap: break-word;
 }
 
+.error {
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  background: rgba(248, 81, 73, 0.1);
+  border: 1px solid #f85149;
+  border-radius: 6px;
+  color: #f85149;
+  font-size: 13px;
+}
+
 .suggestions {
   display: flex;
   flex-wrap: wrap;

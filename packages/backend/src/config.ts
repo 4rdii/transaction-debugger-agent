@@ -41,6 +41,11 @@ export const config = {
   etherscan: {
     apiKey: process.env['ETHERSCAN_API_KEY'] ?? '',
   },
+  solana: {
+    heliusApiKey: process.env['HELIUS_API_KEY'] ?? '',
+    rpcUrl: process.env['SOLANA_RPC_URL'] ?? 'https://api.mainnet-beta.solana.com',
+    devnetRpcUrl: process.env['SOLANA_DEVNET_RPC_URL'] ?? 'https://api.devnet.solana.com',
+  },
   port: parseInt(process.env['PORT'] ?? '3001', 10),
   rpcUrls: {
     // ── Alchemy-supported chains ──────────────────────────────────────────────
@@ -66,4 +71,22 @@ export function getRpcUrl(networkId: string): string {
   const url = config.rpcUrls[networkId];
   if (!url) throw new Error(`No RPC URL configured for network ${networkId}`);
   return url;
+}
+
+// ─── Solana helpers ──────────────────────────────────────────────────────────
+
+export function isSolanaNetwork(networkId: string): boolean {
+  return networkId.startsWith('solana-');
+}
+
+export function getSolanaRpcUrl(networkId: string): string {
+  if (networkId === 'solana-devnet') return config.solana.devnetRpcUrl;
+  return config.solana.rpcUrl;
+}
+
+export function getHeliusUrl(networkId: string): string | null {
+  const key = config.solana.heliusApiKey;
+  if (!key) return null;
+  const cluster = networkId === 'solana-devnet' ? 'devnet' : 'mainnet-beta';
+  return `https://api.helius.xyz/v0/transactions?api-key=${key}&cluster=${cluster}`;
 }

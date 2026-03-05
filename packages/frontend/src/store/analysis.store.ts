@@ -14,6 +14,7 @@ export interface AnalysisState {
   result: AnalysisResult | null;
   progressLog: ProgressEntry[];
   qaLoading: boolean;
+  qaError: string | null;
   qaHistory: Array<{ question: string; answer: string }>;
 }
 
@@ -33,6 +34,7 @@ const initialState: AnalysisState = {
   result: null,
   progressLog: [],
   qaLoading: false,
+  qaError: null,
   qaHistory: [],
 };
 
@@ -47,7 +49,7 @@ function reducer(state: AnalysisState, action: AnalysisAction): AnalysisState {
     case 'FETCH_ERROR':
       return { ...state, loading: false, error: action.payload };
     case 'QA_START':
-      return { ...state, qaLoading: true };
+      return { ...state, qaLoading: true, qaError: null };
     case 'QA_SUCCESS':
       return {
         ...state,
@@ -55,7 +57,7 @@ function reducer(state: AnalysisState, action: AnalysisAction): AnalysisState {
         qaHistory: [...state.qaHistory, action.payload],
       };
     case 'QA_ERROR':
-      return { ...state, qaLoading: false, error: action.payload };
+      return { ...state, qaLoading: false, qaError: action.payload };
     case 'RESET':
       return initialState;
     default:

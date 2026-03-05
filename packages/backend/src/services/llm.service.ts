@@ -1,28 +1,12 @@
-import OpenAI from 'openai';
 import { writeFile, mkdir } from 'fs/promises';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import type { AnalysisResult } from '@debugger/shared';
 import { config } from '../config.js';
+import { getOpenAI } from './openai.service.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const LOGS_DIR = resolve(__dirname, '../../../logs');
-
-let openaiClient: OpenAI | null = null;
-
-function getOpenAI(): OpenAI {
-  if (!openaiClient) {
-    openaiClient = new OpenAI({
-      apiKey: config.openrouter.apiKey,
-      baseURL: config.openrouter.baseURL,
-      defaultHeaders: {
-        'HTTP-Referer': 'https://github.com/ai-tx-debugger',
-        'X-Title': 'AI Transaction Debugger',
-      },
-    });
-  }
-  return openaiClient;
-}
 
 export async function answerQuestion(
   result: AnalysisResult,
@@ -53,7 +37,7 @@ ${result.llmExplanation}`;
       { role: 'user', content: userPrompt },
     ],
     temperature: 0.2,
-    max_tokens: 500,
+    max_tokens: 1024,
   });
 
   const answer = response.choices[0]?.message?.content ?? 'Unable to answer question.';
@@ -64,19 +48,19 @@ ${result.llmExplanation}`;
     const ts = new Date().toISOString().replace(/[:.]/g, '-');
     const short = result.txHash.slice(0, 10);
     const content = [
-      '═'.repeat(80),
+      '='.repeat(80),
       `TX:        ${result.txHash}`,
       `TIMESTAMP: ${new Date().toISOString()}`,
       `TYPE:      QA`,
-      '═'.repeat(80),
+      '='.repeat(80),
       '',
-      '─── SYSTEM PROMPT ───────────────────────────────────────────────────────────',
+      '--- SYSTEM PROMPT ---',
       systemPrompt,
       '',
-      '─── USER PROMPT ─────────────────────────────────────────────────────────────',
+      '--- USER PROMPT ---',
       userPrompt,
       '',
-      '─── ANSWER ──────────────────────────────────────────────────────────────────',
+      '--- ANSWER ---',
       answer,
       '',
     ].join('\n');

@@ -4,7 +4,7 @@ An agentic EVM transaction debugger. Paste a transaction hash, and an LLM agent 
 
 ## Features
 
-- **Multi-chain support** — Ethereum, Polygon, Arbitrum, Optimism, Base, Linea, Berachain
+- **Multi-chain support** — Ethereum, Polygon, Arbitrum, Optimism, Base, Linea, BNB Chain, Avalanche, zkSync Era, Blast, Scroll, Fantom, Gnosis, Berachain
 - **Agentic analysis** — GPT-4o (via OpenRouter) calls tools autonomously to investigate each transaction
 - **Live progress log** — SSE streaming shows tool-by-tool activity so you see the agent working in real time
 - **Source code lookup** — fetches verified Solidity via Etherscan V2, searches all compilation files for the failing function definition
@@ -39,28 +39,27 @@ cd Debugger
 npm install
 ```
 
-Create `packages/backend/.env`:
+Copy `.env.example` to `.env` in the project root and fill in your keys:
 
 ```env
-# OpenRouter
-OPENROUTER_API_KEY=sk-or-...
-OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-OPENROUTER_MODEL=openai/gpt-4o
+# OpenRouter (https://openrouter.ai/keys)
+OPEN_ROUTER_API_KEY=sk-or-...
+LLM_MODEL=openai/gpt-4o          # optional, defaults to openai/gpt-4o
 
-# Tenderly
+# Tenderly (https://dashboard.tenderly.co/account/authorization)
 TENDERLY_ACCESS_KEY=...
 TENDERLY_ACCOUNT_SLUG=...
 TENDERLY_PROJECT_SLUG=...
 
-# Etherscan (V2 key works for all chains including Berachain)
+# Etherscan V2 key — works for all chains (https://etherscan.io/myapikey)
 ETHERSCAN_API_KEY=...
 
-# RPC endpoints
-RPC_URL_1=https://eth-mainnet.g.alchemy.com/v2/...
-RPC_URL_137=https://polygon-mainnet.g.alchemy.com/v2/...
-RPC_URL_42161=https://arb-mainnet.g.alchemy.com/v2/...
-RPC_URL_10=https://opt-mainnet.g.alchemy.com/v2/...
-RPC_URL_8453=https://base-mainnet.g.alchemy.com/v2/...
+# Alchemy key — auto-used for 10 supported chains (optional)
+ALCHEMY_API_KEY=...
+
+# Optional per-chain RPC overrides (take priority over Alchemy)
+# RPC_URL_1=https://...
+# RPC_URL_137=https://...
 ```
 
 ## Development

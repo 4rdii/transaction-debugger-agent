@@ -14,7 +14,20 @@ const RISK_COLOR: Record<string, string> = {
   low: '#8b949e',
 };
 
+const NETWORK_LABELS: Record<string, string> = {
+  '1': 'Ethereum', '137': 'Polygon', '42161': 'Arbitrum One', '10': 'Optimism',
+  '8453': 'Base', '59144': 'Linea', '56': 'BNB Smart Chain', '43114': 'Avalanche',
+  '324': 'zkSync Era', '81457': 'Blast', '534352': 'Scroll', '250': 'Fantom',
+  '100': 'Gnosis', '80094': 'Berachain',
+  'solana-mainnet': 'Solana', 'solana-devnet': 'Solana Devnet',
+};
+
 export function AnalysisView({ result }: AnalysisViewProps) {
+  const isSolana = result.networkId.startsWith('solana-');
+  const networkLabel = NETWORK_LABELS[result.networkId] ?? `Network ${result.networkId}`;
+  const blockLabel = isSolana ? 'Slot' : 'Block';
+  const gasLabel = isSolana ? 'compute units' : 'gas';
+
   return (
     <div className={styles.view}>
       {/* Header */}
@@ -24,7 +37,7 @@ export function AnalysisView({ result }: AnalysisViewProps) {
             {result.success ? '✓ SUCCESS' : '✕ FAILED'}
           </span>
           <span className={styles.meta}>
-            Block #{result.blockNumber} · {result.gasUsed.toLocaleString()} gas · Network {result.networkId}
+            {blockLabel} #{result.blockNumber} · {result.gasUsed.toLocaleString()} {gasLabel} · {networkLabel}
           </span>
         </div>
         <div className={styles.hash}>{result.txHash}</div>
@@ -41,8 +54,8 @@ export function AnalysisView({ result }: AnalysisViewProps) {
         <section className={styles.section}>
           <h3 className={styles.sectionTitle}>Detected Actions</h3>
           <div className={styles.actions}>
-            {result.semanticActions.map((action, i) => (
-              <div key={i} className={styles.action}>
+            {result.semanticActions.map((action) => (
+              <div key={`${action.type}-${action.callId}`} className={styles.action}>
                 <span className={styles.actionType}>{action.type}</span>
                 {action.protocol && <span className={styles.actionProtocol}>{action.protocol}</span>}
                 <span className={styles.actionDesc}>{action.description}</span>
@@ -68,8 +81,8 @@ export function AnalysisView({ result }: AnalysisViewProps) {
         <section className={styles.section}>
           <h3 className={styles.sectionTitle}>Risk Flags</h3>
           <div className={styles.risks}>
-            {result.riskFlags.map((flag, i) => (
-              <div key={i} className={styles.risk} style={{ borderLeftColor: RISK_COLOR[flag.level] }}>
+            {result.riskFlags.map((flag) => (
+              <div key={`${flag.level}-${flag.type}`} className={styles.risk} style={{ borderLeftColor: RISK_COLOR[flag.level] }}>
                 <span className={styles.riskLevel} style={{ color: RISK_COLOR[flag.level] }}>
                   {flag.level.toUpperCase()}
                 </span>
