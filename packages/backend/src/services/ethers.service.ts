@@ -9,6 +9,7 @@ export interface RawTxParams {
   gasPrice: string;
   value: string;
   blockNumber: number;
+  transactionIndex: number;
   nonce: number;
   /** On-chain receipt status: 1 = success, 0 = reverted */
   onChainStatus: boolean;
@@ -33,6 +34,7 @@ export async function fetchTxParams(txHash: string, networkId: string): Promise<
     gasPrice: (tx.gasPrice ?? tx.maxFeePerGas ?? 0n).toString(),
     value: tx.value.toString(),
     blockNumber: receipt.blockNumber,
+    transactionIndex: receipt.index,
     nonce: tx.nonce,
     onChainStatus: receipt.status === 1,
     gasUsed: Number(receipt.gasUsed),

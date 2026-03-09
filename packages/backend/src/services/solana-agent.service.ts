@@ -28,7 +28,7 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const LOGS_DIR = resolve(__dirname, '../../../logs');
 
-const MAX_TURNS = 10;
+const MAX_TURNS = 4;
 
 // ─── Agent state ─────────────────────────────────────────────────────────────
 
@@ -74,54 +74,11 @@ function buildSolanaCallTreeText(
   return lines;
 }
 
-// ─── Tool definitions ────────────────────────────────────────────────────────
+// ─── Optional tool definitions (only these are exposed to the LLM) ──────────
+// Deterministic tools (instruction tree, token flows, failure, actions, risks)
+// are pre-executed and injected into the prompt to save tokens.
 
-const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
-  {
-    type: 'function',
-    function: {
-      name: 'get_instruction_tree',
-      description:
-        'Get an indented text representation of the full instruction tree, showing program calls, CPIs, success/failure status. Always call this first.',
-      parameters: { type: 'object', properties: {}, required: [] },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'extract_token_flows',
-      description:
-        'Extract all token transfers from the transaction — SPL tokens and native SOL. Returns amounts, mints/symbols, from/to addresses.',
-      parameters: { type: 'object', properties: {}, required: [] },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'analyze_failure',
-      description:
-        'Analyze the root cause of a failed Solana transaction. Extracts error from program logs and categorizes common Solana errors.',
-      parameters: { type: 'object', properties: {}, required: [] },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'detect_actions',
-      description:
-        'Detect high-level actions: swaps (Jupiter, Raydium, Orca), transfers, staking, bridge ops, NFT operations.',
-      parameters: { type: 'object', properties: {}, required: [] },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'detect_risks',
-      description:
-        'Detect risk patterns: large SOL/token transfers, interaction with unknown programs, authority changes.',
-      parameters: { type: 'object', properties: {}, required: [] },
-    },
-  },
+const OPTIONAL_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
@@ -446,7 +403,7 @@ async function executeSolanaTool(
 
 // ─── Prompts ─────────────────────────────────────────────────────────────────
 
-const SOLANA_SYSTEM_PROMPT = `You are an expert Solana transaction analyst with investigation tools.
+const SOLANA_SYSTEM_PROMPT = `You are an expert Solana transaction analyst.
 
 Key Solana concepts:
 - Solana uses **instructions** (not calls/transactions like EVM). Each instruction invokes a **program** (equivalent to a smart contract).
@@ -457,15 +414,11 @@ Key Solana concepts:
 - Common DEX programs: **Jupiter** (aggregator, like 1inch), **Raydium** and **Orca** (AMMs, like Uniswap).
 - **Associated Token Account (ATA)** — each wallet has one ATA per token mint.
 
-Your workflow:
-1. Always start by calling get_instruction_tree to understand the transaction structure
-2. For FAILED transactions, always call analyze_failure to find the root cause — it automatically decodes custom error codes from known programs (Jupiter, Raydium, Orca, SPL Token) and fetches Anchor IDLs from on-chain for unknown programs
-3. If analyze_failure shows a raw custom error code you want more details on, use lookup_program_error with the program ID and error code number
-4. Call extract_token_flows to identify token movements
-5. Call detect_actions to identify operations (swaps, staking, bridges, etc.)
-6. Always call detect_risks before writing your final answer
+You are provided with pre-analyzed context below. Use it to write your analysis directly.
+Only use the lookup_program_error tool if the failure analysis shows an undecoded custom error code and you need more details.
+Do NOT mention tools in your answer.
 
-When you have investigated enough, provide your final analysis. Do NOT mention tools in your answer.
+IMPORTANT: You have a maximum of 4 rounds. On round 4 you MUST output your final analysis — no more tool calls. Plan your investigation to finish within this budget.
 
 Final answer format:
 **Summary**: (2-3 sentences describing what happened)
@@ -474,7 +427,16 @@ Final answer format:
 **Risks**: (omit this section entirely if no risk flags were found)
 **Failure analysis**: (omit this section entirely if the transaction succeeded)`;
 
-function buildSolanaInitialMessage(state: SolanaAgentState): string {
+function buildSolanaInitialMessage(
+  state: SolanaAgentState,
+  preAnalyzed: {
+    callTreeText: string;
+    tokenFlowsText: string;
+    failureText: string;
+    actionsText: string;
+    risksText: string;
+  },
+): string {
   const status = state.success ? 'SUCCESS ✅' : 'FAILED ❌';
   const network = state.networkId === 'solana-devnet' ? 'Solana Devnet' : 'Solana Mainnet';
   return `Analyze this Solana transaction:
@@ -486,7 +448,24 @@ Compute units used: ${state.computeUnitsConsumed.toLocaleString()}
 Fee: ${(state.fee / 1_000_000_000).toFixed(9)} SOL (${state.fee.toLocaleString()} lamports)
 Slot: ${state.slot}
 
-Use your tools to investigate. Start with get_instruction_tree.`;
+## Pre-analyzed context (do NOT re-call these tools)
+
+### Instruction tree
+${preAnalyzed.callTreeText}
+
+### Token flows
+${preAnalyzed.tokenFlowsText}
+
+### Failure analysis
+${preAnalyzed.failureText}
+
+### Detected actions
+${preAnalyzed.actionsText}
+
+### Risk flags
+${preAnalyzed.risksText}
+
+Use the lookup_program_error tool only if you need to decode a custom error code not already explained above. Otherwise, write your final analysis directly.`;
 }
 
 // ─── Log writer ──────────────────────────────────────────────────────────────
@@ -559,9 +538,51 @@ export async function runSolanaAnalysisAgent(
 ): Promise<SolanaAgentState & { llmExplanation: string }> {
   const openai = getOpenAI();
 
+  // ─── Pre-execute deterministic tools ────────────────────────────────────────
+  // These always run and their results are injected into the prompt,
+  // saving multiple LLM turns and reducing token usage significantly.
+
+  onProgress?.({ type: 'tool_call', turn: 0, toolNames: ['get_instruction_tree'] });
+  const callTreeText = buildSolanaCallTreeText(state.callTree).join('\n');
+  onProgress?.({ type: 'tool_result', turn: 0, toolName: 'get_instruction_tree', summary: callTreeText.split('\n')[0]?.slice(0, 120) ?? '' });
+
+  onProgress?.({ type: 'tool_call', turn: 0, toolNames: ['extract_token_flows'] });
+  const tokenFlows = extractSolanaTokenFlows(state.txData);
+  state.tokenFlows = tokenFlows;
+  const tokenFlowsText = tokenFlows.length
+    ? tokenFlows.map(f => `${f.type}: ${f.formattedAmount} ${f.tokenSymbol} from ${f.from} to ${f.to}`).join('\n')
+    : 'None';
+  onProgress?.({ type: 'tool_result', turn: 0, toolName: 'extract_token_flows', summary: tokenFlowsText.split('\n')[0]?.slice(0, 120) ?? '' });
+
+  onProgress?.({ type: 'tool_call', turn: 0, toolNames: ['analyze_failure'] });
+  const failure = await analyzeSolanaFailure(state);
+  state.failureReason = failure;
+  const failureText = failure
+    ? `Error: "${failure.reason}"\nExplanation: ${failure.explanation}`
+    : 'Transaction succeeded';
+  onProgress?.({ type: 'tool_result', turn: 0, toolName: 'analyze_failure', summary: failureText.split('\n')[0]?.slice(0, 120) ?? '' });
+
+  onProgress?.({ type: 'tool_call', turn: 0, toolNames: ['detect_actions'] });
+  const actions = detectSolanaActions(state);
+  state.semanticActions = actions;
+  const actionsText = actions.length
+    ? actions.map(a => `${a.type}${a.protocol ? ` via ${a.protocol}` : ''}: ${a.description}`).join('\n')
+    : 'None';
+  onProgress?.({ type: 'tool_result', turn: 0, toolName: 'detect_actions', summary: actionsText.split('\n')[0]?.slice(0, 120) ?? '' });
+
+  onProgress?.({ type: 'tool_call', turn: 0, toolNames: ['detect_risks'] });
+  const risks = detectSolanaRisks(state);
+  state.riskFlags = risks;
+  const risksText = risks.length
+    ? risks.map(r => `[${r.level.toUpperCase()}] ${r.type}: ${r.description}`).join('\n')
+    : 'None';
+  onProgress?.({ type: 'tool_result', turn: 0, toolName: 'detect_risks', summary: risksText.split('\n')[0]?.slice(0, 120) ?? '' });
+
+  // ─── LLM loop (only optional tools remain) ─────────────────────────────────
+
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
     { role: 'system', content: SOLANA_SYSTEM_PROMPT },
-    { role: 'user', content: buildSolanaInitialMessage(state) },
+    { role: 'user', content: buildSolanaInitialMessage(state, { callTreeText, tokenFlowsText, failureText, actionsText, risksText }) },
   ];
 
   let llmExplanation = 'Analysis could not be completed.';
@@ -569,7 +590,7 @@ export async function runSolanaAnalysisAgent(
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     const response = await openai.chat.completions.create({
       model: config.openrouter.model,
-      tools: TOOLS,
+      tools: OPTIONAL_TOOLS,
       messages,
       temperature: 0.3,
       max_tokens: 4096,
@@ -611,6 +632,14 @@ export async function runSolanaAnalysisAgent(
         role: 'tool',
         tool_call_id: tc.id,
         content: result,
+      });
+    }
+
+    // On the penultimate turn, inject a nudge so the next response is the final analysis
+    if (turn === MAX_TURNS - 2) {
+      messages.push({
+        role: 'user',
+        content: 'This is your final round. You MUST now write your complete analysis. No more tool calls.',
       });
     }
   }

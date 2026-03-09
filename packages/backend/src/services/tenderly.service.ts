@@ -40,7 +40,8 @@ export async function simulateTransaction(
 ): Promise<TenderlySimulateResponse> {
   return callSimulate({
     network_id: networkId,
-    block_number: params.blockNumber - 1,
+    block_number: params.blockNumber,
+    transaction_index: params.transactionIndex,
     from: params.from,
     to: params.to,
     input: params.input,
@@ -63,7 +64,8 @@ export async function simulateWithOverrides(
 ): Promise<TenderlySimulateResponse> {
   return callSimulate({
     network_id: networkId,
-    block_number: params.blockNumber - 1,
+    block_number: params.blockNumber,
+    transaction_index: params.transactionIndex,
     from: params.from,
     to: params.to,
     input: params.input,

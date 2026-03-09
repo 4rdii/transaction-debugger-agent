@@ -24,7 +24,7 @@ import type { RawTxParams } from './ethers.service.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const LOGS_DIR = resolve(__dirname, '../../../logs');
 
-const MAX_TURNS = 12;
+const MAX_TURNS = 6;
 
 // ─── Agent state ──────────────────────────────────────────────────────────────
 
@@ -123,54 +123,11 @@ function findCallById(node: NormalizedCall, id: string): NormalizedCall | undefi
   return undefined;
 }
 
-// ─── Tool definitions ─────────────────────────────────────────────────────────
+// ─── Optional tool definitions (only these are exposed to the LLM) ───────────
+// Deterministic tools (call tree, token flows, failure, actions, risks) are
+// pre-executed and injected into the prompt to save tokens.
 
-const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
-  {
-    type: 'function',
-    function: {
-      name: 'get_call_tree',
-      description:
-        'Get an indented text representation of the full call tree, showing contract calls, depth, gas, success/failure status, revert reasons, and protocols. Always call this first.',
-      parameters: { type: 'object', properties: {}, required: [] },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'extract_token_flows',
-      description:
-        'Extract all token transfers from the transaction — ERC20, ERC721, ERC1155, and native ETH. Returns amounts, symbols, from/to addresses, and dollar values.',
-      parameters: { type: 'object', properties: {}, required: [] },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'detect_semantic_actions',
-      description:
-        'Detect high-level DeFi actions: swaps, approvals, deposits, withdrawals, bridge transfers, liquidations, flashloans, multicalls.',
-      parameters: { type: 'object', properties: {}, required: [] },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'analyze_failure',
-      description:
-        'Analyze the root cause of a failed transaction. Returns the revert reason and a human-readable explanation. Only meaningful for failed transactions.',
-      parameters: { type: 'object', properties: {}, required: [] },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'detect_risks',
-      description:
-        'Detect security risk patterns: unlimited token approvals, flashloan usage, large ETH/token transfers, DELEGATECALL to unknown contracts, suspicious destinations.',
-      parameters: { type: 'object', properties: {}, required: [] },
-    },
-  },
+const OPTIONAL_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
@@ -504,21 +461,27 @@ async function executeTool(
 
 // ─── Prompts ──────────────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are an expert DeFi transaction analyst with a set of investigation tools.
+const SYSTEM_PROMPT = `You are an expert DeFi transaction analyst.
 
-Your workflow:
-1. Always start by calling get_call_tree to understand the transaction structure
-2. For FAILED transactions, always call analyze_failure to find the root cause
-3. Call extract_token_flows to identify token movements
-4. Call detect_semantic_actions to identify DeFi operations (swaps, deposits, approvals, etc.)
-5. Always call detect_risks before writing your final answer
-6. Use get_contract_abi when you encounter an unrecognized contract address
-7. Use cast_call to query on-chain state (balances, allowances) at the transaction block — useful when diagnosing exact failure conditions
-8. Use cast_run only when you need low-level opcode trace data
-9. For failed transactions, use simulate_with_fix to determine what fix would have made it succeed (try increase_gas, set_eth_balance, or set_erc20_allowance as appropriate to the failure reason)
-10. Use get_revert_source_location(address="0x...", functionName="<name>") to locate the exact source code that reverted — it downloads ALL compilation files and returns every file that defines a function with that name. You MUST call this for failed transactions once you know which function reverted (from analyze_failure or the call tree). Pass the exact function name without parentheses.
+You are provided with pre-analyzed context (call tree, token flows, semantic actions, failure analysis, risk flags) in the user message. Use this data to write your analysis directly.
 
-When you have investigated enough, provide your final analysis. Do NOT mention tools in your answer.
+You have optional investigation tools available if you need additional detail:
+- get_call_subtree: drill into a specific call by ID (call IDs are shown in the call tree, e.g. "0.1.3")
+- get_contract_abi: look up verified ABI from Etherscan
+- cast_call: query on-chain state (balances, allowances) at the transaction block — use the sender/contract addresses from the tx metadata, do NOT guess addresses
+- cast_run: replay transaction for opcode-level trace (use sparingly)
+- simulate_with_fix: re-simulate with a fix (increase_gas, set_eth_balance, set_erc20_allowance) to test what would have made it succeed
+- get_revert_source_location: fetch verified Solidity source and locate the failing function
+
+For FAILED transactions, you MUST call get_revert_source_location to locate the exact reverting code. Use simulate_with_fix only if you think it would help determine a fix.
+
+IMPORTANT: When you need multiple tool calls, batch them into a SINGLE turn using parallel tool calls. Do NOT call one tool per turn — call all independent queries together.
+
+IMPORTANT: You have a maximum of 6 rounds. On round 6 you MUST output your final analysis — no more tool calls. Plan your investigation to finish within this budget.
+
+IMPORTANT: As soon as you are confident about the root cause and have enough evidence, STOP calling tools and write your final analysis immediately. Do NOT continue investigating if the answer is already clear from the pre-analyzed context and one round of tool calls. Fewer rounds is better.
+
+Do NOT mention tools in your answer.
 
 Final answer format:
 **Summary**: (2-3 sentences describing what happened)
@@ -544,7 +507,16 @@ const NETWORK_NAMES: Record<number, string> = {
   534352: 'Scroll',
 };
 
-function buildInitialMessage(state: AgentState): string {
+function buildInitialMessage(
+  state: AgentState,
+  preAnalyzed: {
+    callTreeText: string;
+    tokenFlowsText: string;
+    actionsText: string;
+    failureText: string;
+    risksText: string;
+  },
+): string {
   const status = state.success ? 'SUCCESS ✅' : 'FAILED ❌';
   const network = NETWORK_NAMES[state.networkId] ?? `Network ${state.networkId}`;
   return `Analyze this EVM transaction:
@@ -552,10 +524,29 @@ function buildInitialMessage(state: AgentState): string {
 Transaction hash: ${state.txHash}
 Network: ${network} (id: ${state.networkId})
 Status: ${status}
+From (sender): ${state.txParams.from}
+To (contract): ${state.txParams.to}
 Gas used: ${state.gasUsed.toLocaleString()}
 Block: ${state.blockNumber}
 
-Use your tools to investigate. Start with get_call_tree.`;
+## Pre-analyzed context (do NOT re-call these tools)
+
+### Call tree
+${preAnalyzed.callTreeText}
+
+### Token flows
+${preAnalyzed.tokenFlowsText}
+
+### Semantic actions
+${preAnalyzed.actionsText}
+
+### Failure analysis
+${preAnalyzed.failureText}
+
+### Risk flags
+${preAnalyzed.risksText}
+
+Use your remaining tools (get_call_subtree, get_contract_abi, cast_call, cast_run, simulate_with_fix, get_revert_source_location) only if you need additional detail. Otherwise, write your final analysis directly.`;
 }
 
 // ─── Log writer ───────────────────────────────────────────────────────────────
@@ -640,7 +631,6 @@ function formatConversationLog(messages: OpenAI.Chat.ChatCompletionMessageParam[
 async function saveAgentLog(
   txHash: string,
   messages: OpenAI.Chat.ChatCompletionMessageParam[],
-  llmExplanation: string,
 ): Promise<void> {
   try {
     await mkdir(LOGS_DIR, { recursive: true });
@@ -685,9 +675,63 @@ export async function runAnalysisAgent(
 ): Promise<AgentState & { llmExplanation: string }> {
   const openai = getOpenAI();
 
+  // ─── Pre-execute deterministic tools ────────────────────────────────────────
+  // These always run and their results are injected into the prompt,
+  // saving multiple LLM turns and reducing token usage significantly.
+
+  onProgress?.({ type: 'tool_call', turn: 0, toolNames: ['get_call_tree'] });
+  const revertPath = findRevertPath(state.callTree);
+  const revertPathIds = new Set(revertPath);
+  const revertOriginId = revertPath.at(-1) ?? '';
+  const callTreeText = buildCallTreeText(state.callTree, 0, [], Infinity, Infinity, revertPathIds, revertOriginId).join('\n');
+  onProgress?.({ type: 'tool_result', turn: 0, toolName: 'get_call_tree', summary: callTreeText.split('\n')[0]?.slice(0, 120) ?? '' });
+
+  onProgress?.({ type: 'tool_call', turn: 0, toolNames: ['extract_token_flows'] });
+  const txInfo = state.simulation.transaction.transaction_info;
+  const tokenFlows = extractTokenFlows(txInfo.asset_changes, txInfo.balance_diff);
+  state.tokenFlows = tokenFlows;
+  const tokenFlowsText = tokenFlows.length
+    ? tokenFlows.map(f =>
+        `${f.type}: ${f.formattedAmount} ${f.tokenSymbol} from ${f.from} to ${f.to}` +
+        (f.dollarValue ? ` (~$${f.dollarValue})` : ''),
+      ).join('\n')
+    : 'None';
+  onProgress?.({ type: 'tool_result', turn: 0, toolName: 'extract_token_flows', summary: tokenFlowsText.split('\n')[0]?.slice(0, 120) ?? '' });
+
+  onProgress?.({ type: 'tool_call', turn: 0, toolNames: ['detect_semantic_actions'] });
+  const actions = detectSemanticActions(state.callTree, state.tokenFlows);
+  state.semanticActions = actions;
+  const actionsText = actions.length
+    ? actions.map(a => `${a.type}${a.protocol ? ` via ${a.protocol}` : ''}: ${a.description}`).join('\n')
+    : 'None';
+  onProgress?.({ type: 'tool_result', turn: 0, toolName: 'detect_semantic_actions', summary: actionsText.split('\n')[0]?.slice(0, 120) ?? '' });
+
+  onProgress?.({ type: 'tool_call', turn: 0, toolNames: ['analyze_failure'] });
+  let failureText: string;
+  if (state.success) {
+    failureText = 'Transaction succeeded';
+  } else {
+    const reason = analyzeFailure(state.callTree);
+    state.failureReason = reason;
+    failureText = reason
+      ? `Revert reason: "${reason.reason}"\nExplanation: ${reason.explanation}`
+      : 'Transaction failed but no revert reason could be decoded.';
+  }
+  onProgress?.({ type: 'tool_result', turn: 0, toolName: 'analyze_failure', summary: failureText.split('\n')[0]?.slice(0, 120) ?? '' });
+
+  onProgress?.({ type: 'tool_call', turn: 0, toolNames: ['detect_risks'] });
+  const risks = detectRisks(state.callTree, state.tokenFlows, state.semanticActions);
+  state.riskFlags = risks;
+  const risksText = risks.length
+    ? risks.map(r => `[${r.level.toUpperCase()}] ${r.type}: ${r.description}`).join('\n')
+    : 'None';
+  onProgress?.({ type: 'tool_result', turn: 0, toolName: 'detect_risks', summary: risksText.split('\n')[0]?.slice(0, 120) ?? '' });
+
+  // ─── LLM loop (only optional tools remain) ─────────────────────────────────
+
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
     { role: 'system', content: SYSTEM_PROMPT },
-    { role: 'user', content: buildInitialMessage(state) },
+    { role: 'user', content: buildInitialMessage(state, { callTreeText, tokenFlowsText, actionsText, failureText, risksText }) },
   ];
 
   let llmExplanation = 'Analysis could not be completed.';
@@ -695,7 +739,8 @@ export async function runAnalysisAgent(
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     const response = await openai.chat.completions.create({
       model: config.openrouter.model,
-      tools: TOOLS,
+      tools: OPTIONAL_TOOLS,
+      parallel_tool_calls: true,
       messages,
       temperature: 0.3,
       max_tokens: 4096,
@@ -740,9 +785,17 @@ export async function runAnalysisAgent(
         content: result,
       });
     }
+
+    // On the penultimate turn, inject a nudge so the next response is the final analysis
+    if (turn === MAX_TURNS - 2) {
+      messages.push({
+        role: 'user',
+        content: 'This is your final round. You MUST now write your complete analysis. No more tool calls.',
+      });
+    }
   }
 
-  await saveAgentLog(state.txHash, messages, llmExplanation);
+  await saveAgentLog(state.txHash, messages);
 
   return { ...state, llmExplanation };
 }

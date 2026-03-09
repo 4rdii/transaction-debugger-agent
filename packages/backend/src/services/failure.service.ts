@@ -7,10 +7,10 @@ function flattenCalls(node: NormalizedCall): NormalizedCall[] {
 function categorizeRevertReason(reason: string): string {
   const r = reason.toLowerCase().trim();
 
+  if (r.includes('allowance') || r.includes('approve') || r.includes('exceeds')) return 'Insufficient token allowance';
   if (r.includes('insufficient') || r.includes('balance')) return 'Insufficient balance';
   if (r.includes('slippage') || r.includes('too little received') || r.includes('min amount')) return 'Slippage exceeded';
   if (r.includes('expired') || r.includes('deadline')) return 'Transaction deadline expired';
-  if (r.includes('allowance') || r.includes('approve') || r.includes('exceeds')) return 'Insufficient token allowance';
   if (r.includes('access') || r.includes('owner') || r.includes('unauthorized') || r.includes('forbidden') || r.includes('not allowed')) return 'Access control violation';
   if (r.includes('overflow') || r.includes('underflow') || r.includes('arithmetic')) return 'Arithmetic error';
   if (r.includes('out of gas') || r.includes('gas')) return 'Out of gas';
@@ -76,7 +76,11 @@ export function analyzeFailure(callTree: NormalizedCall): FailureReason | undefi
     };
   }
 
-  const rootCause = failedCalls[failedCalls.length - 1]!;
+  // Find the deepest failed leaf — a call that reverted but none of its children reverted.
+  // This skips error propagation functions like _revert, verifyCallResult, etc.
+  const rootCause = failedCalls.find(c =>
+    c.children.every(child => child.success),
+  ) ?? failedCalls[failedCalls.length - 1]!;
   return {
     rootCallId: rootCause.id,
     reason: rootCause.revertReason!,
