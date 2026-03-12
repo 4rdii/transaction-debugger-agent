@@ -129,7 +129,7 @@ async function runTonPipeline(
   const hasFailedChildren = flattenTonCalls(agentResult.callTree).some(
     c => !c.success && c.callType !== 'BOUNCE',
   );
-  const hasFailedEventActions = txData.eventActions?.some(a => a.status === 'failed') ?? false;
+  const hasFailedEventActions = txData.eventActions?.some((a: { status: string }) => a.status === 'failed') ?? false;
   const effectiveSuccess = agentResult.success && !hasBounces && !hasFailedChildren && !hasFailedEventActions;
 
   const result: AnalysisResult = {

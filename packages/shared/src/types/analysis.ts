@@ -28,7 +28,7 @@ export interface NormalizedCall {
   children: NormalizedCall[];
 }
 
-export type TokenFlowType = 'Transfer' | 'Mint' | 'Burn' | 'NativeTransfer';
+export type TokenFlowType = 'Transfer' | 'Mint' | 'Burn' | 'NativeTransfer' | 'SwapIn' | 'SwapOut';
 
 export interface TokenFlow {
   type: TokenFlowType;

@@ -1,4 +1,4 @@
-import type { NormalizedCall, TonTxData, TonTrace } from '@debugger/shared';
+import type { NormalizedCall, TonTxData, TonTrace, TonRawTransaction } from '@debugger/shared';
 import { lookupTonContractName, lookupTonOpCode } from '../registry/ton-contracts.js';
 
 const NANOTON = 1_000_000_000;
@@ -49,7 +49,7 @@ function normalizeTraceNode(
   };
 
   // Recursively normalize child traces (messages spawned by this transaction)
-  result.children = node.children.map(child =>
+  result.children = node.children.map((child: TonTrace) =>
     normalizeTraceNode(child, depth + 1, counter, tx.account, accountNames),
   );
 
@@ -63,7 +63,7 @@ export function normalizeTonTransaction(txData: TonTxData): NormalizedCall {
   const accountNames = txData.accountNames;
 
   // Build children from the trace
-  const children = txData.trace.children.map(child =>
+  const children = txData.trace.children.map((child: TonTrace) =>
     normalizeTraceNode(child, 1, counter, rootTx.account, accountNames),
   );
 
@@ -71,7 +71,7 @@ export function normalizeTonTransaction(txData: TonTxData): NormalizedCall {
   // (some won't have trace children if they go to external addresses)
   for (const outMsg of rootTx.outMsgs) {
     // Check if already covered by a child trace
-    const alreadyCovered = children.some(c => c.callee === outMsg.destination);
+    const alreadyCovered = children.some((c: NormalizedCall) => c.callee === outMsg.destination);
     if (!alreadyCovered && outMsg.destination) {
       const childId = `call-${counter.value++}`;
       const opCode = outMsg.opCode ?? null;

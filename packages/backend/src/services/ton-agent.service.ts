@@ -10,6 +10,7 @@ import type {
   RiskFlag,
   FailureReason,
   TonTxData,
+  TonEventAction,
 } from '@debugger/shared';
 import { config } from '../config.js';
 import { getOpenAI } from './openai.service.js';
@@ -313,7 +314,7 @@ function analyzeTonFailure(state: TonAgentState): FailureReason | undefined {
   // Find all bounce messages
   const bounces = allCalls.filter(c => c.callType === 'BOUNCE');
   // Failed event actions (may include failures not visible in the trace tree)
-  const failedEventActions = (state.txData.eventActions ?? []).filter(a => a.status === 'failed');
+  const failedEventActions = (state.txData.eventActions ?? []).filter((a: TonEventAction) => a.status === 'failed');
 
   // Case 1: Root transaction itself failed
   if (!state.success) {
@@ -395,7 +396,7 @@ function analyzeTonFailure(state: TonAgentState): FailureReason | undefined {
   // TonAPI events can report failures for messages that never became transactions
   // (e.g., outbound messages that failed to deliver).
   if (failedEventActions.length > 0) {
-    const details = failedEventActions.map(a => {
+    const details = failedEventActions.map((a: TonEventAction) => {
       const desc = a.description ?? `${a.type} action`;
       return `${a.type}: ${desc}`;
     });
@@ -405,7 +406,7 @@ function analyzeTonFailure(state: TonAgentState): FailureReason | undefined {
       reason: `${failedEventActions.length} failed event action(s)`,
       explanation: [
         `The root transaction executed, but ${failedEventActions.length} action(s) in the trace event failed:`,
-        ...details.map(d => `• ${d}`),
+        ...details.map((d: string) => `• ${d}`),
         '',
         'These failures may not appear in the message trace tree because the outbound messages were never processed into transactions on the destination.',
       ].join('\n'),
@@ -484,7 +485,7 @@ function detectTonRisks(state: TonAgentState): RiskFlag[] {
 
   // ─── Unknown contracts ────────────────────────────────────────────────────
   const jettonWalletAddresses = new Set(
-    state.txData.jettonTransfers.flatMap(jt => [jt.senderAddress, jt.recipientAddress]),
+    state.txData.jettonTransfers.flatMap((jt: { senderAddress: string; recipientAddress: string }) => [jt.senderAddress, jt.recipientAddress]),
   );
   for (const call of allCalls) {
     if (
@@ -571,7 +572,7 @@ function buildTonInitialMessage(
 ): string {
   const status = state.success ? 'SUCCESS ✅' : 'FAILED ❌';
   const hasBounces = flattenCalls(state.callTree).some(c => c.callType === 'BOUNCE');
-  const hasFailedEventActions = (state.txData.eventActions ?? []).some(a => a.status === 'failed');
+  const hasFailedEventActions = (state.txData.eventActions ?? []).some((a: TonEventAction) => a.status === 'failed');
   const statusNote = state.success && (hasBounces || hasFailedEventActions)
     ? 'PARTIAL FAILURE ⚠️ (root tx succeeded but some actions failed)'
     : status;
@@ -717,7 +718,7 @@ export async function runTonAnalysisAgent(
   // ─── Event actions (from TonAPI — may include failures not in trace) ─────────
   const eventActions = state.txData.eventActions ?? [];
   const eventActionsText = eventActions.length
-    ? eventActions.map(a => {
+    ? eventActions.map((a: TonEventAction) => {
         let detail = `${a.type}: status=${a.status}`;
         if (a.description) detail += ` — ${a.description}`;
         if (a.swap) detail += ` | DEX=${a.swap.dex} ${a.swap.symbolIn}→${a.swap.symbolOut}`;

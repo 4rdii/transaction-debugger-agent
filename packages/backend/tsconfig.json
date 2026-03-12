@@ -4,7 +4,7 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "paths": {
-      "@debugger/shared": ["../shared/src/types/index.d.ts"]
+      "@debugger/shared": ["../shared/dist/types/index.d.ts"]
     }
   },
   "include": ["src"]
