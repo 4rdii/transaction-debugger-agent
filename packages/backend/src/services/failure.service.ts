@@ -78,7 +78,7 @@ export function analyzeFailure(callTree: NormalizedCall): FailureReason | undefi
 
   // Find the deepest failed leaf — a call that reverted but none of its children reverted.
   // This skips error propagation functions like _revert, verifyCallResult, etc.
-  const rootCause = failedCalls.find(c =>
+  const rootCause = failedCalls.findLast(c =>
     c.children.every(child => child.success),
   ) ?? failedCalls[failedCalls.length - 1]!;
   return {
