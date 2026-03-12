@@ -20,13 +20,15 @@ const NETWORK_LABELS: Record<string, string> = {
   '324': 'zkSync Era', '81457': 'Blast', '534352': 'Scroll', '250': 'Fantom',
   '100': 'Gnosis', '80094': 'Berachain',
   'solana-mainnet': 'Solana', 'solana-devnet': 'Solana Devnet',
+  'ton-mainnet': 'TON', 'ton-testnet': 'TON Testnet',
 };
 
 export function AnalysisView({ result }: AnalysisViewProps) {
   const isSolana = result.networkId.startsWith('solana-');
+  const isTon = result.networkId.startsWith('ton-');
   const networkLabel = NETWORK_LABELS[result.networkId] ?? `Network ${result.networkId}`;
-  const blockLabel = isSolana ? 'Slot' : 'Block';
-  const gasLabel = isSolana ? 'compute units' : 'gas';
+  const blockLabel = isTon ? 'LT' : isSolana ? 'Slot' : 'Block';
+  const gasLabel = isTon ? 'nanoTON fee' : isSolana ? 'compute units' : 'gas';
 
   return (
     <div className={styles.view}>
@@ -37,7 +39,7 @@ export function AnalysisView({ result }: AnalysisViewProps) {
             {result.success ? '✓ SUCCESS' : '✕ FAILED'}
           </span>
           <span className={styles.meta}>
-            {blockLabel} #{result.blockNumber} · {result.gasUsed.toLocaleString()} {gasLabel} · {networkLabel}
+            {blockLabel} #{result.blockNumber ?? '—'} · {(result.gasUsed ?? 0).toLocaleString()} {gasLabel} · {networkLabel}
           </span>
         </div>
         <div className={styles.hash}>{result.txHash}</div>

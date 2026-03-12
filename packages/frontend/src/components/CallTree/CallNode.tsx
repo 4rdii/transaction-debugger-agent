@@ -23,9 +23,12 @@ export function CallNode({ call }: CallNodeProps) {
     CREATE2: '#3fb950',
     INVOKE: '#9d7cd8',
     CPI: '#7aa2f7',
+    MESSAGE: '#0098EA',
+    BOUNCE: '#f85149',
   };
 
   const isSolanaCall = call.callType === 'INVOKE' || call.callType === 'CPI';
+  const isTonCall = call.callType === 'MESSAGE' || call.callType === 'BOUNCE';
 
   return (
     <div className={styles.node}>
@@ -53,7 +56,7 @@ export function CallNode({ call }: CallNodeProps) {
           <span className={styles.protocol}>[{call.protocol}]</span>
         )}
         <span className={styles.gas}>
-          {call.gasUsed.toLocaleString()} {isSolanaCall ? 'CU' : 'gas'}
+          {(call.gasUsed ?? 0).toLocaleString()} {isTonCall ? 'nanoTON' : isSolanaCall ? 'CU' : 'gas'}
         </span>
         {!call.success && call.revertReason && (
           <span className={styles.revert} title={call.revertReason}>
