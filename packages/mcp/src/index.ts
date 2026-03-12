@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * MCP server for the AI Transaction Debugger.
+ * MCP server for Explorai.
  * Exposes the debugging pipeline as tools callable by Claude CLI.
  * Transport: stdio
  */
@@ -21,7 +21,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { registerTools } from './tools.js';
 
 const server = new McpServer({
-  name: 'tx-debugger',
+  name: 'explorai',
   version: '0.1.0',
 });
 

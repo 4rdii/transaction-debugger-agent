@@ -46,5 +46,5 @@ app.use('/api/rango', debugLimiter, rangoRouter);
 app.use(errorHandler);
 
 app.listen(config.port, () => {
-  console.log(`[server] AI Transaction Debugger running on http://localhost:${config.port}`);
+  console.log(`[server] Explorai running on http://localhost:${config.port}`);
 });

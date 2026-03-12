@@ -9,8 +9,8 @@ export function getOpenAI(): OpenAI {
       apiKey: config.openrouter.apiKey,
       baseURL: config.openrouter.baseURL,
       defaultHeaders: {
-        'HTTP-Referer': 'https://github.com/ai-tx-debugger',
-        'X-Title': 'AI Transaction Debugger',
+        'HTTP-Referer': 'https://github.com/explorai',
+        'X-Title': 'Explorai',
       },
     });
   }

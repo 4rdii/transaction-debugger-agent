@@ -30,7 +30,7 @@ export function OnboardingScreen() {
         animate={{ y: 0, opacity: 1 }}
         transition={{ delay: 0.2 }}
       >
-        TON Debug Agent
+        Explorai
       </motion.h1>
       <motion.p
         className="text-[#8B8E96] text-center mb-12 max-w-[280px]"
@@ -38,7 +38,7 @@ export function OnboardingScreen() {
         animate={{ y: 0, opacity: 1 }}
         transition={{ delay: 0.3 }}
       >
-        Your AI agent for debugging TON transactions
+        Your AI copilot for exploring blockchain transactions
       </motion.p>
 
       {/* Feature Highlights */}

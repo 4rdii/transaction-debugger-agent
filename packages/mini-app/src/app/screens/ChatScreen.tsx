@@ -26,7 +26,7 @@ export function ChatScreen() {
     {
       id: "welcome",
       type: "agent",
-      content: "Hey! I'm your TON Debug Agent. Paste a transaction hash or ask me anything about blockchain transactions.",
+      content: "Hey! I'm Explorai, your AI copilot for blockchain transactions. Paste a tx hash or ask me anything.",
     },
   ]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -49,7 +49,7 @@ export function ChatScreen() {
         {
           id: "welcome",
           type: "agent",
-          content: "Hey! I'm your TON Debug Agent. Paste a transaction hash or ask me anything about blockchain transactions.",
+          content: "Hey! I'm Explorai, your AI copilot for blockchain transactions. Paste a tx hash or ask me anything.",
         },
         {
           id: `hist-user-${historyEntry.txHash}`,
@@ -188,7 +188,7 @@ export function ChatScreen() {
       <div className="bg-[#1A1D27] border-b border-[#2A2D37] px-4 py-3 flex items-center justify-between flex-shrink-0 z-10">
         <div className="flex items-center gap-2">
           <Hexagon className="w-6 h-6 text-[#0098EA]" strokeWidth={1.5} />
-          <span className="text-white font-semibold text-[15px]">TON Debug Agent</span>
+          <span className="text-white font-semibold text-[15px]">Explorai</span>
         </div>
 
         <div className="flex items-center gap-3">

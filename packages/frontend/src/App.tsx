@@ -42,7 +42,7 @@ export function App() {
         <header className={styles.header}>
           <div className={styles.logo}>
             <span className={styles.logoIcon}>&#x2B21;</span>
-            <span className={styles.logoText}>AI Tx Debugger</span>
+            <span className={styles.logoText}>Explorai</span>
           </div>
           <nav className={styles.nav}>
             <button

@@ -22,6 +22,7 @@ const RANGO_CHAIN_TO_NETWORK_ID: Record<string, string> = {
   BERACHAIN: '80094',
   CELO: '42220',
   SOLANA: 'solana-mainnet',
+  TON: 'ton-mainnet',
 };
 
 /** Map a Rango chain name to a debugger networkId (or null if unsupported). */
