@@ -21,6 +21,8 @@ const NETWORKS = [
   { id: '42220', label: 'Celo' },
   { id: 'solana-mainnet', label: 'Solana' },
   { id: 'solana-devnet', label: 'Solana Devnet' },
+  { id: 'ton-mainnet', label: 'TON' },
+  { id: 'ton-testnet', label: 'TON Testnet' },
 ];
 
 export function TxInput() {
@@ -57,19 +59,25 @@ export function TxInput() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isSolana = networkId.startsWith('solana-');
+  const isTon = networkId.startsWith('ton-');
 
   function submitTransaction(hash: string, network: string) {
     const isSol = network.startsWith('solana-');
+    const isTonNet = network.startsWith('ton-');
     const isValidHash = isSol
       ? /^[1-9A-HJ-NP-Za-km-z]{43,88}$/.test(hash)
-      : /^0x[0-9a-fA-F]{64}$/.test(hash);
+      : isTonNet
+        ? /^[A-Za-z0-9+/=]{44}$/.test(hash) || /^[0-9a-fA-F]{64}$/.test(hash)
+        : /^0x[0-9a-fA-F]{64}$/.test(hash);
 
     if (!isValidHash) {
       dispatch({
         type: 'FETCH_ERROR',
         payload: isSol
           ? 'Invalid Solana transaction signature (base58).'
-          : 'Invalid transaction hash. Must be 0x + 64 hex characters.',
+          : isTonNet
+            ? 'Invalid TON transaction hash (44-char base64 or 64-char hex).'
+            : 'Invalid transaction hash. Must be 0x + 64 hex characters.',
       });
       return;
     }
@@ -111,7 +119,7 @@ export function TxInput() {
         <input
           className={styles.hashInput}
           type="text"
-          placeholder={isSolana ? 'Transaction signature (base58...)' : 'Transaction hash (0x...)'}
+          placeholder={isSolana ? 'Transaction signature (base58...)' : isTon ? 'Transaction hash (base64 or hex)' : 'Transaction hash (0x...)'}
           value={txHash}
           onChange={e => setTxHash(e.target.value.trim())}
           spellCheck={false}
