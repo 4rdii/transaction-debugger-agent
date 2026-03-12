@@ -26,6 +26,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build shared types
+        run: npm run build -w packages/shared
+
       - name: Run typecheck
         run: npm run typecheck
 

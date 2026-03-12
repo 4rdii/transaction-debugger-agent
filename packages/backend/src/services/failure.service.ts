@@ -76,11 +76,16 @@ export function analyzeFailure(callTree: NormalizedCall): FailureReason | undefi
     };
   }
 
-  // Find the deepest failed leaf — a call that reverted but none of its children reverted.
-  // This skips error propagation functions like _revert, verifyCallResult, etc.
-  const rootCause = failedCalls.findLast(c =>
-    c.children.every(child => child.success),
-  ) ?? failedCalls[failedCalls.length - 1]!;
+  // Find the last failed leaf — a call that reverted but none of its children reverted.
+  // Search from the end so we pick the latest in flattened order.
+  let rootCause: NormalizedCall | undefined;
+  for (let i = failedCalls.length - 1; i >= 0; i--) {
+    if (failedCalls[i]!.children.every(child => child.success)) {
+      rootCause = failedCalls[i];
+      break;
+    }
+  }
+  rootCause ??= failedCalls[failedCalls.length - 1]!;
   return {
     rootCallId: rootCause.id,
     reason: rootCause.revertReason!,
