@@ -86,19 +86,19 @@ export function TONFeaturesPanel({ analysis }: { analysis: AnalysisResult }) {
                   )}
                 </div>
 
-                <div className="flex-1 bg-[#0F1117] rounded-lg p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[11px] text-[#0098EA] font-medium">
+                <div className="flex-1 min-w-0 bg-[#0F1117] rounded-lg p-3">
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <span className="text-[11px] text-[#0098EA] font-medium break-words min-w-0">
                       {msg.type} Message{msg.opName ? ` (${msg.opName})` : ""}
                     </span>
                     <span
-                      className={`text-[11px] ${msg.status === "Success" ? "text-[#2ECC71]" : "text-[#E74C3C]"}`}
+                      className={`text-[11px] flex-shrink-0 ${msg.status === "Success" ? "text-[#2ECC71]" : "text-[#E74C3C]"}`}
                     >
                       {msg.status}
                     </span>
                   </div>
-                  <div className="text-[12px] text-white mb-1">{msg.from}</div>
-                  <div className="text-[12px] text-[#8B8E96]">
+                  <div className="text-[12px] text-white mb-1 truncate">{msg.from}</div>
+                  <div className="text-[12px] text-[#8B8E96] truncate">
                     &rarr; {msg.to}
                     {msg.value && <span className="ml-2 text-[#0098EA]">({msg.value})</span>}
                   </div>

@@ -201,23 +201,25 @@ export function AnalysisResultCard({ analysis }: { analysis: AnalysisResult }) {
           {flatCalls.map(({ call, level }) => (
             <div
               key={call.id}
-              className="flex items-center gap-3"
-              style={{ paddingLeft: `${level * 16}px` }}
+              className="flex items-start gap-2"
+              style={{ paddingLeft: `${level * 12}px` }}
             >
-              <div className="w-1.5 h-1.5 rounded-full bg-[#0098EA]" />
-              <div className="flex-1 min-w-0">
-                <span className="text-white text-[13px] font-mono">
-                  {call.functionName ?? call.callType}
-                </span>
-                <span className="text-[#8B8E96] text-[12px] ml-2 font-mono">
+              <div className="w-1.5 h-1.5 rounded-full bg-[#0098EA] mt-1.5 flex-shrink-0" />
+              <div className="flex-1 min-w-0 overflow-hidden">
+                <div className="flex items-center gap-1">
+                  <span className="text-white text-[12px] font-mono truncate">
+                    {call.functionName ?? call.callType}
+                  </span>
+                  {call.success ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#2ECC71] flex-shrink-0" />
+                  ) : (
+                    <XCircle className="w-3.5 h-3.5 text-[#E74C3C] flex-shrink-0" />
+                  )}
+                </div>
+                <span className="text-[#8B8E96] text-[11px] font-mono truncate block">
                   {call.contractName ?? truncAddr(call.callee)}
                 </span>
               </div>
-              {call.success ? (
-                <CheckCircle2 className="w-4 h-4 text-[#2ECC71] flex-shrink-0" />
-              ) : (
-                <XCircle className="w-4 h-4 text-[#E74C3C] flex-shrink-0" />
-              )}
             </div>
           ))}
           {flatCalls.length >= 20 && (
@@ -236,16 +238,16 @@ export function AnalysisResultCard({ analysis }: { analysis: AnalysisResult }) {
           <div className="space-y-3">
             {analysis.tokenFlows.map((flow, index) => (
               <div key={index} className="bg-[#0F1117] rounded-lg p-3">
-                <div className="flex items-center gap-2 mb-2 overflow-hidden">
-                  <span className="text-[12px] text-[#8B8E96] font-mono truncate">{truncAddr(flow.from)}</span>
-                  <ArrowRight className="w-4 h-4 text-[#0098EA] flex-shrink-0" />
-                  <span className="text-[12px] text-[#8B8E96] font-mono truncate">{truncAddr(flow.to)}</span>
+                <div className="flex items-center gap-1.5 mb-2 min-w-0">
+                  <span className="text-[11px] text-[#8B8E96] font-mono truncate flex-shrink min-w-0">{truncAddr(flow.from)}</span>
+                  <ArrowRight className="w-3.5 h-3.5 text-[#0098EA] flex-shrink-0" />
+                  <span className="text-[11px] text-[#8B8E96] font-mono truncate flex-shrink min-w-0">{truncAddr(flow.to)}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 rounded-full bg-[#0098EA]/10 flex items-center justify-center text-[10px] text-[#0098EA]">
+                  <div className="w-5 h-5 rounded-full bg-[#0098EA]/10 flex items-center justify-center text-[10px] text-[#0098EA] flex-shrink-0">
                     {flow.tokenSymbol[0]}
                   </div>
-                  <span className="text-white text-[13px] font-medium">
+                  <span className="text-white text-[13px] font-medium truncate">
                     {flow.formattedAmount} {flow.tokenSymbol}
                   </span>
                 </div>
@@ -264,12 +266,12 @@ export function AnalysisResultCard({ analysis }: { analysis: AnalysisResult }) {
         >
           <div className="space-y-2">
             {analysis.riskFlags.map((flag, index) => (
-              <div key={index} className="bg-[#0F1117] rounded-lg p-3 flex items-start gap-3">
-                <RiskBadge severity={flag.level} />
-                <div className="flex-1">
-                  <div className="text-white text-[13px] font-medium mb-1">{flag.type}</div>
-                  <div className="text-[#8B8E96] text-[12px]">{flag.description}</div>
+              <div key={index} className="bg-[#0F1117] rounded-lg p-3">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <RiskBadge severity={flag.level} />
+                  <span className="text-white text-[12px] font-medium truncate">{flag.type}</span>
                 </div>
+                <div className="text-[#8B8E96] text-[12px] break-words">{flag.description}</div>
               </div>
             ))}
           </div>
