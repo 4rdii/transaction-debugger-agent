@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router";
-import { Hexagon, ChevronDown, Send, History, Search, Cpu, Loader2 } from "lucide-react";
+import { ChevronDown, ArrowUp, History, Loader2, Sparkles } from "lucide-react";
 import { AnalysisResultCard } from "../components/AnalysisResultCard";
 import { TONFeaturesPanel } from "../components/TONFeaturesPanel";
 import { useApp } from "../store";
@@ -22,15 +22,10 @@ export function ChatScreen() {
   const [showChainDropdown, setShowChainDropdown] = useState(false);
   const [input, setInput] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "welcome",
-      type: "agent",
-      content: "Hey! I'm Explorai, your AI copilot for blockchain transactions. Paste a tx hash or ask me anything.",
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<(() => void) | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const chains: Chain[] = ["TON", "ETH", "Polygon", "Arbitrum", "Base"];
   const selectedChain = state.selectedChain;
@@ -41,16 +36,19 @@ export function ChatScreen() {
 
   useEffect(scrollToBottom, [messages, scrollToBottom]);
 
+  // Auto-resize textarea
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.style.height = "24px";
+      inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 120) + "px";
+    }
+  }, [input]);
+
   // Restore conversation from history entry
   useEffect(() => {
     const historyEntry = (location.state as { fromHistory?: HistoryEntry } | null)?.fromHistory;
     if (historyEntry?.result) {
       setMessages([
-        {
-          id: "welcome",
-          type: "agent",
-          content: "Hey! I'm Explorai, your AI copilot for blockchain transactions. Paste a tx hash or ask me anything.",
-        },
         {
           id: `hist-user-${historyEntry.txHash}`,
           type: "user",
@@ -59,24 +57,19 @@ export function ChatScreen() {
         {
           id: `hist-result-${historyEntry.txHash}`,
           type: "agent",
-          content: "Here's what I found:",
+          content: "",
           analysis: historyEntry.result,
         },
       ]);
-      // Clear the navigation state so refreshing doesn't re-trigger
       window.history.replaceState({}, "");
     }
   }, [location.state]);
 
-  // Detect if input looks like a transaction hash
   const isTxHash = (text: string): boolean => {
     const t = text.trim();
-    // EVM: 0x + 64 hex chars
     if (/^0x[0-9a-fA-F]{64}$/.test(t)) return true;
-    // TON: 64 hex chars or 44-char base64
     if (/^[0-9a-fA-F]{64}$/.test(t)) return true;
     if (/^[A-Za-z0-9+/=]{44}$/.test(t)) return true;
-    // Solana: base58, 43-88 chars
     if (/^[1-9A-HJ-NP-Za-km-z]{43,88}$/.test(t)) return true;
     return false;
   };
@@ -85,20 +78,18 @@ export function ChatScreen() {
     if (!input.trim() || isAnalyzing) return;
     const text = input.trim();
 
-    // Add user message
     const userMsg: Message = { id: Date.now().toString(), type: "user", content: text };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setIsAnalyzing(true);
 
     if (isTxHash(text)) {
-      // ─── Transaction analysis flow ──────────────────────────────────────
       const txHash = text;
       const networkId = CHAIN_TO_NETWORK_ID[selectedChain];
       const statusId = (Date.now() + 1).toString();
       setMessages((prev) => [
         ...prev,
-        { id: statusId, type: "status", content: "Starting analysis..." },
+        { id: statusId, type: "status", content: "Analyzing transaction..." },
       ]);
 
       const cancel = streamAnalysis(txHash, networkId, (event) => {
@@ -120,7 +111,7 @@ export function ChatScreen() {
             {
               id: (Date.now() + 2).toString(),
               type: "agent",
-              content: "Here's what I found:",
+              content: "",
               analysis: event.result,
             },
           ]);
@@ -150,7 +141,6 @@ export function ChatScreen() {
       });
       cancelRef.current = cancel;
     } else {
-      // ─── Question / chat flow ───────────────────────────────────────────
       const statusId = (Date.now() + 1).toString();
       setMessages((prev) => [
         ...prev,
@@ -178,32 +168,30 @@ export function ChatScreen() {
     }
   };
 
-  const handleQuickAction = (action: string) => {
-    setInput(action);
-  };
+  const hasMessages = messages.length > 0;
 
   return (
     <div className="h-screen bg-[#0F1117] flex flex-col">
-      {/* Top Bar */}
-      <div className="bg-[#1A1D27] border-b border-[#2A2D37] px-4 py-3 flex items-center justify-between flex-shrink-0 z-10">
+      {/* Top Bar — minimal */}
+      <div className="px-4 py-3 flex items-center justify-between flex-shrink-0 z-10">
         <div className="flex items-center gap-2">
-          <Hexagon className="w-6 h-6 text-[#0098EA]" strokeWidth={1.5} />
-          <span className="text-white font-semibold text-[15px]">Explorai</span>
+          <Sparkles className="w-5 h-5 text-[#0098EA]" />
+          <span className="text-white font-medium text-[15px]">Explorai</span>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {/* Chain Selector */}
           <div className="relative">
             <button
               onClick={() => setShowChainDropdown(!showChainDropdown)}
-              className="px-3 py-1.5 bg-[#0F1117] border border-[#2A2D37] rounded-full text-[13px] text-white flex items-center gap-1.5 hover:border-[#0098EA] transition-colors"
+              className="px-3 py-1.5 border border-[#2A2D37] rounded-lg text-[13px] text-[#8B8E96] flex items-center gap-1.5 hover:border-[#3A3D47] transition-colors"
             >
               {selectedChain}
               <ChevronDown className="w-3.5 h-3.5" />
             </button>
 
             {showChainDropdown && (
-              <div className="absolute top-full right-0 mt-2 bg-[#1A1D27] border border-[#2A2D37] rounded-xl overflow-hidden min-w-[120px] shadow-xl">
+              <div className="absolute top-full right-0 mt-1 bg-[#1A1D27] border border-[#2A2D37] rounded-lg overflow-hidden min-w-[120px] shadow-xl z-50">
                 {chains.map((chain) => (
                   <button
                     key={chain}
@@ -211,7 +199,11 @@ export function ChatScreen() {
                       dispatch({ type: "SET_CHAIN", chain });
                       setShowChainDropdown(false);
                     }}
-                    className="w-full px-4 py-2.5 text-left text-[13px] text-white hover:bg-[#2A2D37] transition-colors"
+                    className={`w-full px-4 py-2 text-left text-[13px] transition-colors ${
+                      chain === selectedChain
+                        ? "text-white bg-[#0098EA]/10"
+                        : "text-[#8B8E96] hover:text-white hover:bg-[#2A2D37]"
+                    }`}
                   >
                     {chain}
                   </button>
@@ -224,127 +216,130 @@ export function ChatScreen() {
             onClick={() => navigate("/history")}
             className="w-8 h-8 flex items-center justify-center text-[#8B8E96] hover:text-white transition-colors"
           >
-            <History className="w-5 h-5" />
+            <History className="w-4 h-4" />
           </button>
         </div>
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 space-y-4">
-        {messages.length === 1 && (
-          <div className="space-y-3 mb-6">
-            <QuickActionChip
-              label="Debug Transaction"
-              icon={<Search className="w-4 h-4" />}
-              onClick={() => handleQuickAction("")}
-            />
-            <QuickActionChip
-              label="Check Token Flows"
-              icon={<Cpu className="w-4 h-4" />}
-              onClick={() => handleQuickAction("")}
-            />
-            <QuickActionChip
-              label="Risk Scan"
-              icon={<Cpu className="w-4 h-4" />}
-              onClick={() => handleQuickAction("")}
-            />
+      <div className="flex-1 overflow-y-auto overflow-x-hidden">
+        {!hasMessages ? (
+          /* Empty State — centered like ChatGPT */
+          <div className="h-full flex flex-col items-center justify-center px-6">
+            <Sparkles className="w-10 h-10 text-[#0098EA]/60 mb-4" />
+            <h2 className="text-white text-[18px] font-medium mb-2">What can I help with?</h2>
+            <p className="text-[#8B8E96] text-[14px] text-center mb-8 max-w-[280px]">
+              Paste a transaction hash to analyze, or ask anything about blockchain transactions.
+            </p>
+            <div className="w-full max-w-[340px] grid grid-cols-2 gap-2">
+              <SuggestionChip
+                label="Analyze a swap"
+                onClick={() => {}}
+              />
+              <SuggestionChip
+                label="Check risks"
+                onClick={() => {}}
+              />
+              <SuggestionChip
+                label="Token flows"
+                onClick={() => {}}
+              />
+              <SuggestionChip
+                label="What is MEV?"
+                onClick={() => setInput("What is MEV?")}
+              />
+            </div>
+          </div>
+        ) : (
+          /* Conversation */
+          <div className="max-w-[600px] mx-auto px-4 py-4">
+            {messages.map((message) => (
+              <div key={message.id}>
+                {message.type === "user" && (
+                  <div className="mb-6">
+                    <div className="bg-[#1A1D27] rounded-2xl px-4 py-3 text-white text-[14px] break-all font-mono inline-block max-w-full">
+                      {message.content}
+                    </div>
+                  </div>
+                )}
+
+                {message.type === "status" && (
+                  <div className="mb-6 flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 text-[#0098EA] animate-spin flex-shrink-0" />
+                    <span className="text-[#8B8E96] text-[13px]">{message.content}</span>
+                  </div>
+                )}
+
+                {message.type === "agent" && (
+                  <div className="mb-6">
+                    {message.content && (
+                      <div className="text-[#c8cad0] text-[14px] leading-relaxed whitespace-pre-wrap break-words">
+                        {message.content}
+                      </div>
+                    )}
+                    {message.analysis && (
+                      <div className="mt-3 space-y-3">
+                        <AnalysisResultCard analysis={message.analysis} />
+                        {message.analysis.networkId.startsWith("ton-") && (
+                          <TONFeaturesPanel analysis={message.analysis} />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+            <div ref={messagesEndRef} />
           </div>
         )}
-
-        {messages.map((message) => (
-          <div key={message.id}>
-            {message.type === "status" && (
-              <div className="flex gap-3 mb-4">
-                <div className="w-8 h-8 rounded-full bg-[#0098EA]/10 flex items-center justify-center flex-shrink-0">
-                  <Loader2 className="w-4 h-4 text-[#0098EA] animate-spin" />
-                </div>
-                <div className="flex-1">
-                  <div className="bg-[#1A1D27] border border-[#2A2D37] rounded-xl rounded-tl-none px-4 py-3 text-[#8B8E96] text-[13px]">
-                    {message.content}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {message.type === "agent" && (
-              <div className="flex gap-3 mb-4 max-w-[85%]">
-                <div className="w-8 h-8 rounded-full bg-[#0098EA]/10 flex items-center justify-center flex-shrink-0">
-                  <Hexagon className="w-4 h-4 text-[#0098EA]" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="bg-[#1A1D27] border border-[#2A2D37] rounded-xl rounded-tl-none px-4 py-3 text-white text-[14px]">
-                    {message.content}
-                  </div>
-                  {message.analysis && (
-                    <div className="mt-3 space-y-3">
-                      <AnalysisResultCard analysis={message.analysis} />
-                      {message.analysis.networkId.startsWith("ton-") && (
-                        <TONFeaturesPanel analysis={message.analysis} />
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {message.type === "user" && (
-              <div className="flex justify-end mb-4">
-                <div className="bg-[#0098EA] rounded-xl rounded-tr-none px-4 py-3 text-white text-[14px] max-w-[80%] break-all font-mono">
-                  {message.content}
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
-        <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Bar */}
-      <div className="bg-[#1A1D27] border-t border-[#2A2D37] px-4 py-3 flex-shrink-0">
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSend()}
-            placeholder="Paste tx hash or ask a question..."
-            className="flex-1 bg-[#0F1117] border border-[#2A2D37] rounded-full px-4 py-2.5 text-white text-[14px] placeholder:text-[#8B8E96] focus:outline-none focus:border-[#0098EA] transition-colors font-mono"
-            disabled={isAnalyzing}
-          />
-          <button
-            onClick={handleSend}
-            disabled={isAnalyzing || !input.trim()}
-            className="w-10 h-10 bg-[#0098EA] rounded-full flex items-center justify-center text-white hover:bg-[#0088D4] transition-colors flex-shrink-0 disabled:opacity-50"
-          >
-            {isAnalyzing ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <Send className="w-5 h-5" />
-            )}
-          </button>
+      {/* Input Bar — ChatGPT style */}
+      <div className="flex-shrink-0 px-4 pb-4 pt-2">
+        <div className="max-w-[600px] mx-auto relative">
+          <div className="bg-[#1A1D27] border border-[#2A2D37] rounded-2xl px-4 py-3 flex items-end gap-2 focus-within:border-[#3A3D47] transition-colors">
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              placeholder="Paste tx hash or ask a question..."
+              rows={1}
+              className="flex-1 bg-transparent text-white text-[14px] placeholder:text-[#555] focus:outline-none resize-none leading-6 min-h-[24px] max-h-[120px]"
+              disabled={isAnalyzing}
+            />
+            <button
+              onClick={handleSend}
+              disabled={isAnalyzing || !input.trim()}
+              className="w-8 h-8 bg-[#0098EA] rounded-lg flex items-center justify-center text-white flex-shrink-0 disabled:opacity-30 disabled:bg-[#2A2D37] transition-all hover:bg-[#0088D4]"
+            >
+              {isAnalyzing ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <ArrowUp className="w-4 h-4" />
+              )}
+            </button>
+          </div>
+          <p className="text-[#555] text-[11px] text-center mt-2">
+            Explorai can make mistakes. Verify important information.
+          </p>
         </div>
       </div>
     </div>
   );
 }
 
-function QuickActionChip({
-  label,
-  icon,
-  onClick,
-}: {
-  label: string;
-  icon: React.ReactNode;
-  onClick: () => void;
-}) {
+function SuggestionChip({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="w-full bg-[#1A1D27] border border-[#2A2D37] rounded-xl px-4 py-3 flex items-center gap-3 text-white text-[14px] hover:border-[#0098EA] transition-colors"
+      className="border border-[#2A2D37] rounded-xl px-3 py-2.5 text-[#8B8E96] text-[13px] hover:border-[#3A3D47] hover:text-white transition-colors text-left"
     >
-      <div className="w-8 h-8 rounded-full bg-[#0098EA]/10 flex items-center justify-center text-[#0098EA]">
-        {icon}
-      </div>
       {label}
     </button>
   );
