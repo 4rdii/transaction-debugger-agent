@@ -133,8 +133,8 @@ export function registerTools(server: McpServer): void {
     'debug_transaction',
     'Fetch, simulate, and analyze a transaction: builds the call tree, extracts token flows, detects DeFi actions, identifies failure reasons and risk flags. Returns structured text for you to interpret — no external LLM is called.',
     {
-      txHash: z.string().describe('Transaction hash (0x... for EVM, base58 for Solana)'),
-      networkId: z.string().describe('Network ID: "1" (Ethereum), "137" (Polygon), "42161" (Arbitrum), "10" (Optimism), "8453" (Base), "56" (BSC), "solana-mainnet", "solana-devnet", etc.'),
+      txHash: z.string().describe('Transaction hash (0x... for EVM, base58 for Solana, base64/hex for TON)'),
+      networkId: z.string().describe('Network ID: "1" (Ethereum), "137" (Polygon), "42161" (Arbitrum), "10" (Optimism), "8453" (Base), "56" (BSC), "solana-mainnet", "solana-devnet", "ton-mainnet", "ton-testnet", etc.'),
     },
     async ({ txHash, networkId }) => {
       const data = await debugTransactionNoLLM(txHash, networkId);
@@ -150,7 +150,7 @@ export function registerTools(server: McpServer): void {
     'Fetch and decode the call tree of a transaction without running the AI analysis. Returns an indented trace of all internal calls, showing contract names, functions, and revert reasons.',
     {
       txHash: z.string().describe('Transaction hash'),
-      networkId: z.string().describe('Network ID (e.g. "1", "137", "solana-mainnet")'),
+      networkId: z.string().describe('Network ID (e.g. "1", "137", "solana-mainnet", "ton-mainnet")'),
     },
     async ({ txHash, networkId }) => {
       const tree = await getCallTree(txHash, networkId);

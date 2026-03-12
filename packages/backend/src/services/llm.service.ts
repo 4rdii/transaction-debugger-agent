@@ -9,12 +9,13 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const LOGS_DIR = resolve(__dirname, '../../../logs');
 
 export async function answerQuestion(
-  result: AnalysisResult,
+  result: AnalysisResult | null | undefined,
   question: string
 ): Promise<string> {
   const openai = getOpenAI();
 
-  const context = `Transaction context:
+  const context = result
+    ? `Transaction context:
 - Hash: ${result.txHash}
 - Status: ${result.success ? 'success' : 'failed'}
 - Actions: ${result.semanticActions.map(a => a.description).join('; ')}
@@ -25,9 +26,12 @@ export async function answerQuestion(
 ${result.failureReason ? `- Failure reason: ${result.failureReason.reason}` : ''}
 
 Previous explanation:
-${result.llmExplanation}`;
+${result.llmExplanation}`
+    : 'No transaction context available.';
 
-  const systemPrompt = 'You are a DeFi transaction analyst. Answer questions about the transaction using only the provided context. Be concise and precise.';
+  const systemPrompt = result
+    ? 'You are a DeFi transaction analyst. Answer questions about the transaction using only the provided context. Be concise and precise.'
+    : 'You are a blockchain and DeFi expert. Answer questions about blockchain transactions, TON, Solana, EVM chains, DeFi protocols, and smart contracts. Be concise and precise.';
   const userPrompt = `${context}\n\nQuestion: ${question}`;
 
   const response = await openai.chat.completions.create({
@@ -46,10 +50,10 @@ ${result.llmExplanation}`;
   try {
     await mkdir(LOGS_DIR, { recursive: true });
     const ts = new Date().toISOString().replace(/[:.]/g, '-');
-    const short = result.txHash.slice(0, 10);
+    const short = result?.txHash?.slice(0, 10) ?? 'no-tx';
     const content = [
       '='.repeat(80),
-      `TX:        ${result.txHash}`,
+      `TX:        ${result?.txHash ?? 'N/A'}`,
       `TIMESTAMP: ${new Date().toISOString()}`,
       `TYPE:      QA`,
       '='.repeat(80),

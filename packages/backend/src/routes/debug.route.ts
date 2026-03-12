@@ -7,13 +7,21 @@ import { normalizeCallTrace } from '../services/normalizer.service.js';
 import { runAnalysisAgent } from '../services/agent.service.js';
 import type { AgentProgressEvent } from '../services/agent.service.js';
 import { getCached, setCached } from '../services/cache.service.js';
-import { isSolanaNetwork } from '../config.js';
+import { isSolanaNetwork, isTonNetwork } from '../config.js';
 import { fetchSolanaTransaction } from '../services/solana-rpc.service.js';
 import { normalizeSolanaTransaction } from '../services/solana-normalizer.service.js';
 import { runSolanaAnalysisAgent } from '../services/solana-agent.service.js';
-import type { AnalysisResult } from '@debugger/shared';
+import { fetchTonTransaction } from '../services/ton-rpc.service.js';
+import { normalizeTonTransaction } from '../services/ton-normalizer.service.js';
+import { runTonAnalysisAgent } from '../services/ton-agent.service.js';
+import type { AnalysisResult, NormalizedCall } from '@debugger/shared';
 
 export const debugRouter = Router();
+
+/** Flatten a call tree into a flat list */
+function flattenTonCalls(node: NormalizedCall): NormalizedCall[] {
+  return [node, ...node.children.flatMap(flattenTonCalls)];
+}
 
 // ─── Shared analysis pipeline ─────────────────────────────────────────────────
 
@@ -63,6 +71,73 @@ async function runSolanaPipeline(
     success: agentResult.success,
     gasUsed: agentResult.computeUnitsConsumed,
     blockNumber: agentResult.slot,
+    callTree: agentResult.callTree,
+    tokenFlows: agentResult.tokenFlows,
+    semanticActions: agentResult.semanticActions,
+    riskFlags: agentResult.riskFlags,
+    failureReason: agentResult.failureReason,
+    llmExplanation: agentResult.llmExplanation,
+    analyzedAt: new Date().toISOString(),
+  };
+
+  setCached(txHash, networkId, result);
+  return result;
+}
+
+async function runTonPipeline(
+  txHash: string,
+  networkId: string,
+  onStep?: StepCallback,
+  onAgentProgress?: ProgressCallback,
+): Promise<AnalysisResult> {
+  const cached = getCached(txHash, networkId);
+  if (cached) {
+    onStep?.('Loaded from cache.');
+    return cached;
+  }
+
+  onStep?.('Fetching TON transaction trace...');
+  const txData = await fetchTonTransaction(txHash, networkId);
+
+  onStep?.('Normalizing message tree...');
+  const callTree = normalizeTonTransaction(txData);
+
+  onStep?.('Starting TON AI agent...');
+  const agentResult = await runTonAnalysisAgent(
+    {
+      txHash,
+      networkId,
+      success: txData.success,
+      exitCode: txData.exitCode,
+      lt: txData.lt,
+      utime: txData.utime,
+      fee: txData.fee,
+      account: txData.account,
+      callTree,
+      txData,
+      tokenFlows: [],
+      semanticActions: [],
+      riskFlags: [],
+      failureReason: undefined,
+    },
+    onAgentProgress,
+  );
+
+  // In TON, root tx can "succeed" but child messages bounce or event actions fail.
+  // Mark as failed if any messages bounced, child calls failed, or event actions failed.
+  const hasBounces = agentResult.riskFlags.some(f => f.type === 'BOUNCED_MESSAGE');
+  const hasFailedChildren = flattenTonCalls(agentResult.callTree).some(
+    c => !c.success && c.callType !== 'BOUNCE',
+  );
+  const hasFailedEventActions = txData.eventActions?.some(a => a.status === 'failed') ?? false;
+  const effectiveSuccess = agentResult.success && !hasBounces && !hasFailedChildren && !hasFailedEventActions;
+
+  const result: AnalysisResult = {
+    txHash,
+    networkId,
+    success: effectiveSuccess,
+    gasUsed: Number(agentResult.fee),
+    blockNumber: Number(agentResult.lt),
     callTree: agentResult.callTree,
     tokenFlows: agentResult.tokenFlows,
     semanticActions: agentResult.semanticActions,
@@ -145,6 +220,9 @@ async function runPipeline(
   if (isSolanaNetwork(networkId)) {
     return runSolanaPipeline(txHash, networkId, onStep, onAgentProgress);
   }
+  if (isTonNetwork(networkId)) {
+    return runTonPipeline(txHash, networkId, onStep, onAgentProgress);
+  }
   return runEvmPipeline(txHash, networkId, onStep, onAgentProgress);
 }
 
@@ -160,12 +238,24 @@ debugRouter.get('/stream', async (req: Request, res: Response) => {
 
   // Validate format based on network type
   const isSolana = isSolanaNetwork(networkId);
-  const isValidHash = isSolana
-    ? /^[1-9A-HJ-NP-Za-km-z]{43,88}$/.test(txHash)
-    : /^0x[0-9a-fA-F]{64}$/.test(txHash);
+  const isTon = isTonNetwork(networkId);
+  let isValidHash: boolean;
+  let invalidMsg: string;
+
+  if (isSolana) {
+    isValidHash = /^[1-9A-HJ-NP-Za-km-z]{43,88}$/.test(txHash);
+    invalidMsg = 'Invalid Solana signature';
+  } else if (isTon) {
+    // TON tx hashes are 44-char base64 or 64-char hex
+    isValidHash = /^[A-Za-z0-9+/=]{44}$/.test(txHash) || /^[0-9a-fA-F]{64}$/.test(txHash);
+    invalidMsg = 'Invalid TON transaction hash';
+  } else {
+    isValidHash = /^0x[0-9a-fA-F]{64}$/.test(txHash);
+    invalidMsg = 'Invalid transaction hash';
+  }
 
   if (!isValidHash) {
-    res.status(400).json({ error: isSolana ? 'Invalid Solana signature' : 'Invalid transaction hash' });
+    res.status(400).json({ error: invalidMsg });
     return;
   }
 

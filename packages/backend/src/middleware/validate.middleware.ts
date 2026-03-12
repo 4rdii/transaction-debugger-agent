@@ -23,5 +23,5 @@ export const DebugRequestSchema = z.object({
 
 export const QARequestSchema = z.object({
   question: z.string().min(3).max(500),
-  context: z.object({}).passthrough(), // full AnalysisResult, validated loosely
+  context: z.object({}).passthrough().nullable().optional(), // full AnalysisResult or null
 });

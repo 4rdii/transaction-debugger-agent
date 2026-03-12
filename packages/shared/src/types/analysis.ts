@@ -1,6 +1,6 @@
 // Domain types that flow through the backend analysis pipeline
 
-export type CallType = 'CALL' | 'DELEGATECALL' | 'STATICCALL' | 'CREATE' | 'CREATE2' | 'INVOKE' | 'CPI';
+export type CallType = 'CALL' | 'DELEGATECALL' | 'STATICCALL' | 'CREATE' | 'CREATE2' | 'INVOKE' | 'CPI' | 'MESSAGE' | 'BOUNCE';
 
 export interface DecodedParam {
   name: string;
@@ -53,6 +53,10 @@ export type SemanticActionType =
   | 'Flashloan'
   | 'Transfer'
   | 'Multicall'
+  | 'Burn'
+  | 'Mint'
+  | 'ContractCreation'
+  | 'ContractInteraction'
   | 'Unknown';
 
 export interface SemanticAction {

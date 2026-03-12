@@ -10,10 +10,10 @@ qaRouter.post(
   '/',
   validate(QARequestSchema),
   async (req: Request, res: Response, next: NextFunction) => {
-    const { question, context } = req.body as { question: string; context: AnalysisResult };
+    const { question, context } = req.body as { question: string; context?: AnalysisResult | null };
 
     try {
-      const answer = await answerQuestion(context, question);
+      const answer = await answerQuestion(context ?? null, question);
       res.json({ answer });
     } catch (err) {
       next(err);

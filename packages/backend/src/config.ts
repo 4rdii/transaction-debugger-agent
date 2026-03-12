@@ -54,6 +54,11 @@ export const config = {
     rpcUrl: process.env['SOLANA_RPC_URL'] ?? 'https://api.mainnet-beta.solana.com',
     devnetRpcUrl: process.env['SOLANA_DEVNET_RPC_URL'] ?? 'https://api.devnet.solana.com',
   },
+  ton: {
+    tonapiKey: process.env['TONAPI_KEY'] ?? '',
+    tonapiBaseUrl: process.env['TONAPI_BASE_URL'] ?? 'https://tonapi.io',
+    testnetBaseUrl: process.env['TONAPI_TESTNET_BASE_URL'] ?? 'https://testnet.tonapi.io',
+  },
   port: parseInt(process.env['PORT'] ?? '3001', 10),
   rpcUrls: {
     // ── Alchemy-supported chains ──────────────────────────────────────────────
@@ -97,4 +102,21 @@ export function getHeliusUrl(networkId: string): string | null {
   if (!key) return null;
   const cluster = networkId === 'solana-devnet' ? 'devnet' : 'mainnet-beta';
   return `https://api.helius.xyz/v0/transactions?api-key=${key}&cluster=${cluster}`;
+}
+
+// ─── TON helpers ────────────────────────────────────────────────────────────
+
+export function isTonNetwork(networkId: string): boolean {
+  return networkId.startsWith('ton-');
+}
+
+export function getTonApiBaseUrl(networkId: string): string {
+  if (networkId === 'ton-testnet') return config.ton.testnetBaseUrl;
+  return config.ton.tonapiBaseUrl;
+}
+
+export function getTonApiHeaders(): Record<string, string> {
+  const key = config.ton.tonapiKey;
+  if (key) return { Authorization: `Bearer ${key}` };
+  return {};
 }

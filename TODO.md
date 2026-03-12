@@ -1,5 +1,17 @@
 # Feature Backlog
+- [ ] make it token efficient 
+```
+ideas for better token usage:
 
+Add memory for you agents and add chain type based skills like:
+https://ethskills.com/
+or the file attached
+
+Use different agent for different tasks with different system prompts
+
+decrease MAX_TURNS
+12 is a little bit high I think
+```
 ## Agent Tools
 - [ ] **`decode_calldata(data, address?)`** — look up unknown function selectors via 4byte.directory
 - [ ] **`get_token_price(tokenAddress, networkId, timestamp)`** — historical price via DeFiLlama/CoinGecko; gives exact dollar values at tx time

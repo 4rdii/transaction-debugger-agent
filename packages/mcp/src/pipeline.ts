@@ -12,11 +12,15 @@ import { analyzeFailure } from '../../backend/src/services/failure.service.js';
 import { detectRisks } from '../../backend/src/services/risk.service.js';
 import { runAnalysisAgent } from '../../backend/src/services/agent.service.js';
 import { getCached, setCached } from '../../backend/src/services/cache.service.js';
-import { isSolanaNetwork } from '../../backend/src/config.js';
+import { isSolanaNetwork, isTonNetwork } from '../../backend/src/config.js';
 import { fetchSolanaTransaction } from '../../backend/src/services/solana-rpc.service.js';
 import { normalizeSolanaTransaction } from '../../backend/src/services/solana-normalizer.service.js';
 import { extractSolanaTokenFlows } from '../../backend/src/services/solana-tokenflow.service.js';
 import { runSolanaAnalysisAgent } from '../../backend/src/services/solana-agent.service.js';
+import { fetchTonTransaction } from '../../backend/src/services/ton-rpc.service.js';
+import { normalizeTonTransaction } from '../../backend/src/services/ton-normalizer.service.js';
+import { extractTonTokenFlows } from '../../backend/src/services/ton-tokenflow.service.js';
+import { runTonAnalysisAgent } from '../../backend/src/services/ton-agent.service.js';
 import { resolveRangoSwap } from '../../backend/src/services/rango.service.js';
 import type { AnalysisResult, NormalizedCall, TokenFlow, RiskFlag, SemanticAction, FailureReason } from '@debugger/shared';
 
@@ -115,12 +119,61 @@ async function runSolanaPipeline(
   return result;
 }
 
+async function runTonPipeline(
+  txHash: string,
+  networkId: string,
+): Promise<AnalysisResult> {
+  const cached = getCached(txHash, networkId);
+  if (cached) return cached;
+
+  const txData = await fetchTonTransaction(txHash, networkId);
+  const callTree = normalizeTonTransaction(txData);
+
+  const agentResult = await runTonAnalysisAgent({
+    txHash,
+    networkId,
+    success: txData.success,
+    exitCode: txData.exitCode,
+    lt: txData.lt,
+    utime: txData.utime,
+    fee: txData.fee,
+    account: txData.account,
+    callTree,
+    txData,
+    tokenFlows: [],
+    semanticActions: [],
+    riskFlags: [],
+    failureReason: undefined,
+  });
+
+  const result: AnalysisResult = {
+    txHash,
+    networkId,
+    success: agentResult.success,
+    gasUsed: Number(agentResult.fee),
+    blockNumber: Number(agentResult.lt),
+    callTree: agentResult.callTree,
+    tokenFlows: agentResult.tokenFlows,
+    semanticActions: agentResult.semanticActions,
+    riskFlags: agentResult.riskFlags,
+    failureReason: agentResult.failureReason,
+    llmExplanation: agentResult.llmExplanation,
+    analyzedAt: new Date().toISOString(),
+  };
+
+  setCached(txHash, networkId, result);
+  return result;
+}
+
 export async function debugTransaction(
   txHash: string,
   networkId: string,
 ): Promise<AnalysisResult> {
   if (isSolanaNetwork(networkId)) {
     return runSolanaPipeline(txHash, networkId);
+  }
+  if (isTonNetwork(networkId)) {
+    return runTonPipeline(txHash, networkId);
   }
   return runEvmPipeline(txHash, networkId);
 }
@@ -192,12 +245,40 @@ async function runSolanaPipelineNoLLM(
   };
 }
 
+async function runTonPipelineNoLLM(
+  txHash: string,
+  networkId: string,
+): Promise<DebugData> {
+  const txData = await fetchTonTransaction(txHash, networkId);
+  const callTree = normalizeTonTransaction(txData);
+  const tokenFlows = extractTonTokenFlows(txData);
+  const semanticActions = detectSemanticActions(callTree, tokenFlows);
+  const failureReason = txData.success ? undefined : analyzeFailure(callTree);
+  const riskFlags = detectRisks(callTree, tokenFlows, semanticActions);
+
+  return {
+    txHash,
+    networkId,
+    success: txData.success,
+    gasUsed: Number(txData.fee),
+    blockNumber: Number(txData.lt),
+    callTree,
+    tokenFlows,
+    semanticActions,
+    riskFlags,
+    failureReason,
+  };
+}
+
 export async function debugTransactionNoLLM(
   txHash: string,
   networkId: string,
 ): Promise<DebugData> {
   if (isSolanaNetwork(networkId)) {
     return runSolanaPipelineNoLLM(txHash, networkId);
+  }
+  if (isTonNetwork(networkId)) {
+    return runTonPipelineNoLLM(txHash, networkId);
   }
   return runEvmPipelineNoLLM(txHash, networkId);
 }
@@ -212,6 +293,10 @@ export async function getCallTree(
     const txData = await fetchSolanaTransaction(txHash, networkId);
     return normalizeSolanaTransaction(txData);
   }
+  if (isTonNetwork(networkId)) {
+    const txData = await fetchTonTransaction(txHash, networkId);
+    return normalizeTonTransaction(txData);
+  }
 
   const txParams = await fetchTxParams(txHash, networkId);
   const simulation = await simulateTransaction(txParams, networkId);
@@ -225,9 +310,12 @@ export async function getTokenFlows(
   networkId: string,
 ): Promise<TokenFlow[]> {
   if (isSolanaNetwork(networkId)) {
-    // Solana token flows require full agent analysis
     const result = await debugTransaction(txHash, networkId);
     return result.tokenFlows;
+  }
+  if (isTonNetwork(networkId)) {
+    const txData = await fetchTonTransaction(txHash, networkId);
+    return extractTonTokenFlows(txData);
   }
 
   const txParams = await fetchTxParams(txHash, networkId);
@@ -243,6 +331,10 @@ export async function getRiskFlags(
   networkId: string,
 ): Promise<RiskFlag[]> {
   if (isSolanaNetwork(networkId)) {
+    const result = await debugTransaction(txHash, networkId);
+    return result.riskFlags;
+  }
+  if (isTonNetwork(networkId)) {
     const result = await debugTransaction(txHash, networkId);
     return result.riskFlags;
   }
