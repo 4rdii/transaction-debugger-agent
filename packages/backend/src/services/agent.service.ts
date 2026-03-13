@@ -26,6 +26,21 @@ const LOGS_DIR = resolve(__dirname, '../../../logs');
 
 const MAX_TURNS = 6;
 
+/** Parse address_labels JSON block from the end of LLM output.
+ *  Returns the labels and the cleaned explanation text. */
+export function parseAddressLabels(text: string): { explanation: string; labels: Record<string, string> } {
+  const match = text.match(/```address_labels\s*\n([\s\S]*?)\n```\s*$/);
+  if (!match) return { explanation: text, labels: {} };
+
+  const explanation = text.slice(0, match.index).trimEnd();
+  try {
+    const labels = JSON.parse(match[1]!) as Record<string, string>;
+    return { explanation, labels };
+  } catch {
+    return { explanation, labels: {} };
+  }
+}
+
 // ─── Agent state ──────────────────────────────────────────────────────────────
 
 export interface AgentState {
@@ -488,7 +503,12 @@ Final answer format:
 **Step-by-step**: (numbered list of what occurred in order)
 **Token flows**: (omit this section entirely if there are none)
 **Risks**: (omit this section entirely if no risk flags were found)
-**Failure analysis**: (omit this section entirely if the transaction succeeded)`;
+**Failure analysis**: (omit this section entirely if the transaction succeeded)
+
+IMPORTANT: At the very end of your response, output an address labels block. For EVERY address that appears in the transaction, assign a human-readable role label. Use known contract/protocol names when available (e.g. "Uniswap V3 Router", "USDC Token"). For unknown addresses, assign a descriptive role based on what they did (e.g. "Swapper (sender)", "Liquidity Pool", "Fee Receiver", "Token Approval Target"). Format:
+\`\`\`address_labels
+{"0xabc...full_address": "Role Label", "0xdef...full_address": "Another Label"}
+\`\`\``;
 
 const NETWORK_NAMES: Record<number, string> = {
   1:      'Ethereum Mainnet',
@@ -672,7 +692,7 @@ export type ProgressCallback = (event: AgentProgressEvent) => void;
 export async function runAnalysisAgent(
   state: AgentState,
   onProgress?: ProgressCallback,
-): Promise<AgentState & { llmExplanation: string }> {
+): Promise<AgentState & { llmExplanation: string; llmAddressLabels: Record<string, string> }> {
   const openai = getOpenAI();
 
   // ─── Pre-execute deterministic tools ────────────────────────────────────────
@@ -797,5 +817,6 @@ export async function runAnalysisAgent(
 
   await saveAgentLog(state.txHash, messages);
 
-  return { ...state, llmExplanation };
+  const parsed = parseAddressLabels(llmExplanation);
+  return { ...state, llmExplanation: parsed.explanation, llmAddressLabels: parsed.labels };
 }

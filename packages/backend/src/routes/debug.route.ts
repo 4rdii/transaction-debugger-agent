@@ -128,7 +128,7 @@ async function runSolanaPipeline(
   };
   const result: AnalysisResult = {
     ...partial,
-    addressLabels: buildAddressLabels(partial),
+    addressLabels: { ...buildAddressLabels(partial), ...(agentResult.llmAddressLabels ?? {}) },
     analyzedAt: new Date().toISOString(),
   };
 
@@ -199,7 +199,7 @@ async function runTonPipeline(
   };
   const result: AnalysisResult = {
     ...partial,
-    addressLabels: buildAddressLabels(partial, txData.accountNames),
+    addressLabels: { ...buildAddressLabels(partial, txData.accountNames), ...(agentResult.llmAddressLabels ?? {}) },
     analyzedAt: new Date().toISOString(),
   };
 
@@ -263,7 +263,7 @@ async function runEvmPipeline(
   };
   const result: AnalysisResult = {
     ...partial,
-    addressLabels: buildAddressLabels(partial),
+    addressLabels: { ...buildAddressLabels(partial), ...(agentResult.llmAddressLabels ?? {}) },
     analyzedAt: new Date().toISOString(),
   };
 

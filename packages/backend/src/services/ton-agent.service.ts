@@ -23,6 +23,7 @@ import {
 } from '../registry/ton-contracts.js';
 import { traceTonTransaction, formatTxTracerForPrompt, type TxTracerResult } from './ton-txtracer.service.js';
 import { resolveContractSource, formatSourceForPrompt } from './ton-source.service.js';
+import { parseAddressLabels } from './agent.service.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const LOGS_DIR = resolve(__dirname, '../../../logs');
@@ -555,7 +556,12 @@ Final answer format:
 **Step-by-step**: (numbered list of what occurred in order, following the message chain)
 **Token flows**: (omit this section entirely if there are none)
 **Risks**: (omit this section entirely if no risk flags were found)
-**Failure analysis**: (include this section if ANY message in the trace bounced or failed, even if root succeeded. Explain the most likely cause of each failure.)`;
+**Failure analysis**: (include this section if ANY message in the trace bounced or failed, even if root succeeded. Explain the most likely cause of each failure.)
+
+IMPORTANT: At the very end of your response, output an address labels block. For EVERY address that appears in the transaction, assign a human-readable role label. Use known contract/protocol names when available (e.g. "Ston.fi Router", "DeDust Vault", "USDT Jetton Master"). For unknown addresses, assign a descriptive role based on what they did (e.g. "Swapper (sender)", "Liquidity Pool", "Fee Receiver", "Jetton Wallet (sender)", "Jetton Wallet (recipient)"). Format:
+\`\`\`address_labels
+{"0:abc...full_address": "Role Label", "EQxyz...full_address": "Another Label"}
+\`\`\``;
 
 function buildTonInitialMessage(
   state: TonAgentState,
@@ -674,7 +680,7 @@ export type ProgressCallback = (event: AgentProgressEvent) => void;
 export async function runTonAnalysisAgent(
   state: TonAgentState,
   onProgress?: ProgressCallback,
-): Promise<TonAgentState & { llmExplanation: string }> {
+): Promise<TonAgentState & { llmExplanation: string; llmAddressLabels: Record<string, string> }> {
   const openai = getOpenAI();
 
   // ─── Pre-execute deterministic tools ────────────────────────────────────────
@@ -816,5 +822,6 @@ export async function runTonAnalysisAgent(
 
   await saveTonAgentLog(state.txHash, messages);
 
-  return { ...state, llmExplanation };
+  const parsed = parseAddressLabels(llmExplanation);
+  return { ...state, llmExplanation: parsed.explanation, llmAddressLabels: parsed.labels };
 }

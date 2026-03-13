@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import { writeFile, mkdir } from 'fs/promises';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { parseAddressLabels } from './agent.service.js';
 import type {
   NormalizedCall,
   TokenFlow,
@@ -425,7 +426,12 @@ Final answer format:
 **Step-by-step**: (numbered list of what occurred in order)
 **Token flows**: (omit this section entirely if there are none)
 **Risks**: (omit this section entirely if no risk flags were found)
-**Failure analysis**: (omit this section entirely if the transaction succeeded)`;
+**Failure analysis**: (omit this section entirely if the transaction succeeded)
+
+IMPORTANT: At the very end of your response, output an address labels block. For EVERY address that appears in the transaction, assign a human-readable role label. Use known program/protocol names when available (e.g. "Jupiter Aggregator", "Raydium AMM", "USDC Mint"). For unknown addresses, assign a descriptive role based on what they did (e.g. "Swapper (sender)", "Liquidity Pool", "Fee Receiver", "Token Account (sender)"). Format:
+\`\`\`address_labels
+{"abc...full_address": "Role Label", "def...full_address": "Another Label"}
+\`\`\``;
 
 function buildSolanaInitialMessage(
   state: SolanaAgentState,
@@ -535,7 +541,7 @@ export type ProgressCallback = (event: AgentProgressEvent) => void;
 export async function runSolanaAnalysisAgent(
   state: SolanaAgentState,
   onProgress?: ProgressCallback,
-): Promise<SolanaAgentState & { llmExplanation: string }> {
+): Promise<SolanaAgentState & { llmExplanation: string; llmAddressLabels: Record<string, string> }> {
   const openai = getOpenAI();
 
   // ─── Pre-execute deterministic tools ────────────────────────────────────────
@@ -646,5 +652,6 @@ export async function runSolanaAnalysisAgent(
 
   await saveSolanaAgentLog(state.signature, messages);
 
-  return { ...state, llmExplanation };
+  const parsed = parseAddressLabels(llmExplanation);
+  return { ...state, llmExplanation: parsed.explanation, llmAddressLabels: parsed.labels };
 }
