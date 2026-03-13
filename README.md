@@ -34,8 +34,6 @@ While TON is the primary focus, Explorai also supports:
 
 - **EVM chains** (14 networks) — Ethereum, Polygon, Arbitrum, Optimism, Base, BSC, and more via Tenderly simulation + Etherscan source lookup
 - **Solana** — transaction parsing, IDL-based instruction decoding, token flow extraction via Helius
-- **Cross-chain swaps** — Rango swap ID resolution for multi-step bridge/swap routes
-
 The agent auto-detects the chain from the hash format and routes to the correct pipeline.
 
 ## Architecture
