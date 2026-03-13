@@ -1,5 +1,7 @@
 # Explorai — AI Transaction Debugger
 
+> **Live App**: [Telegram Mini App](https://t.me/ExploraiBot/app) | **Backend**: `https://explorai.debazaar.click`
+
 An agentic multi-chain transaction debugger. Paste a transaction hash, and an LLM agent uses on-chain investigation tools to explain what happened, why it failed, and what would fix it. Supports EVM, Solana, and TON transactions.
 
 ## Features
@@ -22,8 +24,7 @@ An agentic multi-chain transaction debugger. Paste a transaction hash, and an LL
 | Layer | Tech |
 |---|---|
 | Backend | Node.js + TypeScript + Express (port 3001) |
-| Frontend | Vite + React + TypeScript (port 5173) |
-| Mini App | Vite + React + Tailwind v4 (port 5174) — Telegram Mini App |
+| Mini App | Vite + React + Tailwind v4 — Telegram Mini App |
 | AI | Configurable LLM via OpenRouter (default: claude-haiku-4-5) |
 | EVM Simulation | Tenderly REST API |
 | Solana RPC | Helius / public Solana endpoints |
@@ -84,16 +85,12 @@ BOT_TOKEN=...
 # Terminal 1 — backend
 npm run dev:backend
 
-# Terminal 2 — original frontend
-npm run dev:frontend
-
-# Terminal 3 — Telegram mini app
+# Terminal 2 — Telegram mini app
 npm run dev:mini-app
 ```
 
 | App | URL |
 |---|---|
-| Frontend | http://localhost:5173 |
 | Mini App | http://localhost:5174 |
 | Backend | http://localhost:3001 |
 
@@ -217,12 +214,6 @@ packages/
                   # ton-contracts.ts — known TON contracts & op-codes
       middleware/ # error, telegram-auth (HMAC-SHA256 validation)
       __tests__/  # vitest unit tests
-  frontend/
-    src/
-      components/ # TxInput, AnalysisView, CallTree, TokenFlowPanel,
-                  # QAChat, ProgressLog, RangoSwapView
-      store/      # analysis.store.ts — useReducer state
-      api/        # client.ts — fetch + SSE helpers
   mini-app/
     src/
       app/        # Telegram Mini App — Chat, History, Risk screens
