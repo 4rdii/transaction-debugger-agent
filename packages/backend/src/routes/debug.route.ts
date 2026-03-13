@@ -25,31 +25,18 @@ function flattenCalls(node: NormalizedCall): NormalizedCall[] {
   return [node, ...node.children.flatMap(flattenCalls)];
 }
 
-/** Extract human-readable labels for all addresses found in the analysis */
-function buildAddressLabels(result: Omit<AnalysisResult, 'addressLabels' | 'analyzedAt'>): Record<string, string> {
+/** Extract human-readable labels for all addresses found in the analysis.
+ *  extraNames is an optional map of additional labels (e.g. TonAPI accountNames). */
+function buildAddressLabels(
+  result: Omit<AnalysisResult, 'addressLabels' | 'analyzedAt'>,
+  extraNames?: Map<string, string>,
+): Record<string, string> {
   const labels: Record<string, string> = {};
 
-  // From call tree: contract names + protocol names
-  for (const call of flattenCalls(result.callTree)) {
-    const addr = call.callee?.toLowerCase();
-    if (!addr || labels[addr]) continue;
-    if (call.contractName) {
-      labels[addr] = call.contractName;
-    } else if (call.protocol) {
-      labels[addr] = call.protocol;
-    }
-    // Also label callers if they have names
-    const callerAddr = call.caller?.toLowerCase();
-    if (callerAddr && !labels[callerAddr] && call.contractName) {
-      // Don't overwrite — caller might have its own name from another call
-    }
-  }
-
-  // From token flows: label token addresses with symbol
-  for (const flow of result.tokenFlows) {
-    const tokenAddr = flow.tokenAddress?.toLowerCase();
-    if (tokenAddr && !labels[tokenAddr]) {
-      labels[tokenAddr] = flow.tokenSymbol || flow.tokenName;
+  // From external name sources (TonAPI accountNames, etc.) — lowest priority, added first
+  if (extraNames) {
+    for (const [addr, name] of extraNames) {
+      if (name) labels[addr] = name;
     }
   }
 
@@ -57,11 +44,27 @@ function buildAddressLabels(result: Omit<AnalysisResult, 'addressLabels' | 'anal
   for (const action of result.semanticActions) {
     if (action.protocol) {
       for (const addr of action.involvedAddresses) {
-        const lower = addr.toLowerCase();
-        if (!labels[lower]) {
-          labels[lower] = action.protocol;
-        }
+        if (!labels[addr]) labels[addr] = action.protocol;
       }
+    }
+  }
+
+  // From token flows: label token addresses with symbol
+  for (const flow of result.tokenFlows) {
+    const tokenAddr = flow.tokenAddress;
+    if (tokenAddr && !labels[tokenAddr]) {
+      labels[tokenAddr] = flow.tokenSymbol || flow.tokenName;
+    }
+  }
+
+  // From call tree: contract names + protocol names — highest priority
+  for (const call of flattenCalls(result.callTree)) {
+    const addr = call.callee;
+    if (!addr) continue;
+    if (call.contractName) {
+      labels[addr] = call.contractName;
+    } else if (call.protocol && !labels[addr]) {
+      labels[addr] = call.protocol;
     }
   }
 
@@ -196,7 +199,7 @@ async function runTonPipeline(
   };
   const result: AnalysisResult = {
     ...partial,
-    addressLabels: buildAddressLabels(partial),
+    addressLabels: buildAddressLabels(partial, txData.accountNames),
     analyzedAt: new Date().toISOString(),
   };
 
