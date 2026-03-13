@@ -7,3 +7,4 @@ logs/
 *.js.map
 *.d.ts.map
 tx-debugger.tar.gz
+docs/screenshots/*
