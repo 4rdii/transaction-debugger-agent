@@ -2,7 +2,7 @@ import type { DebugRequest, DebugResponse, QARequest, QAResponse, RangoResolveRe
 
 // In dev, VITE_API_URL is unset so relative paths are used (proxied by Vite to localhost:3001).
 // In production (Vercel), set VITE_API_URL=https://your-server.com:3001
-const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
+const API_BASE = ((import.meta.env.VITE_API_URL as string | undefined) ?? '').replace(/\/+$/, '');
 
 async function apiFetch<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
