@@ -1,47 +1,107 @@
-# Explorai — AI Transaction Debugger
+# Explorai — AI Transaction Agent for TON
 
-> **Live App**: [Telegram Mini App](https://t.me/ExploraiBot/app) | **Backend**: `https://explorai.debazaar.click`
+> **Try it now**: [Open in Telegram](https://t.me/ExploraiAgentBot/app)
 
-An agentic multi-chain transaction debugger. Paste a transaction hash, and an LLM agent uses on-chain investigation tools to explain what happened, why it failed, and what would fix it. Supports EVM, Solana, and TON transactions.
+Explorai is a Telegram-native AI agent that debugs and explains blockchain transactions. Paste any TON transaction hash and get a plain-English breakdown of what happened — token flows, risk flags, failure analysis, and more. Built as a Telegram Mini App with native authentication.
 
-## Features
+## What It Does
 
-- **Multi-chain EVM support** — Ethereum, Polygon, Arbitrum, Optimism, Base, Linea, BNB Chain, Avalanche, zkSync Era, Blast, Scroll, Fantom, Gnosis, Berachain
-- **Solana support** — transaction parsing, instruction decoding via IDL, token flow extraction, known-program and error registries
-- **TON support** — transaction traces via TonAPI, Jetton + native TON token flows, known contract/op-code registry (Ston.fi, DeDust, bridges)
-- **Auto network detection** — automatically identifies chain from tx hash format (EVM `0x`, TON base64, Solana base58) and probes EVM RPCs to find the exact chain
-- **Rango cross-chain swaps** — resolve Rango swap IDs to visualize multi-step bridge/swap routes
-- **Agentic analysis** — LLM (configurable via OpenRouter) calls tools autonomously to investigate each transaction
-- **Live progress log** — SSE streaming shows tool-by-tool activity so you see the agent working in real time
-- **Source code lookup** — fetches verified Solidity via Etherscan V2, searches all compilation files for the failing function definition
-- **Fix simulation** — re-simulates with patched state (more gas, ETH balance, token allowance) to confirm the root cause
-- **On-chain queries** — reads balances/allowances at the exact block via Foundry `cast call`
-- **Telegram Mini App** — mobile-first UI with Telegram authentication and per-user usage tracking
-- **MCP server** — use the debugger as tools inside Claude Code
+1. **Paste a TON transaction hash** into the chat
+2. The AI agent automatically fetches the full trace tree and token events via TonAPI
+3. It runs an agentic analysis loop — calling tools to inspect the call tree, extract Jetton/TON transfers, detect risks, and identify failures
+4. You get a structured report with an AI-generated explanation, streamed in real time
+
+## TON Integration
+
+- **TonAPI** — fetches transaction traces (`/v2/traces`) and events (`/v2/events`) for full transaction reconstruction
+- **TON call tree normalization** — converts TonAPI trace format into a unified call tree with `MESSAGE` and `BOUNCE` call types
+- **Jetton + native TON token flows** — extracts all Jetton transfers and native TON value movements from transaction events
+- **Known contract registry** — identifies Ston.fi, DeDust, TON bridges, popular Jettons, and decodes TON op-codes for human-readable output
+- **TON-specific AI agent** — dedicated system prompt with TON domain knowledge (message routing, bounced messages, Jetton standard, op-codes)
+- **Auto network detection** — recognizes TON transaction hashes (base64 with `+/=` or 64-char hex) and routes to the TON pipeline automatically
+
+## Telegram Mini App
+
+- **Native Telegram auth** — HMAC-SHA256 validation of `initData` from `telegram-web-app.js`, no separate login required
+- **Per-user usage tracking** — tracks analyses and questions per Telegram user
+- **Mobile-first UI** — dark theme, chat-style interface designed for Telegram's Mini App viewport
+- **Real-time streaming** — SSE via fetch (with auth headers) shows the agent's tool calls as they happen
+- **Screens**: Chat (main analysis), History (past transactions), Risk Detail (expandable risk flags)
+
+## Multi-Chain Support
+
+While TON is the primary focus, Explorai also supports:
+
+- **EVM chains** (14 networks) — Ethereum, Polygon, Arbitrum, Optimism, Base, BSC, and more via Tenderly simulation + Etherscan source lookup
+- **Solana** — transaction parsing, IDL-based instruction decoding, token flow extraction via Helius
+- **Cross-chain swaps** — Rango swap ID resolution for multi-step bridge/swap routes
+
+The agent auto-detects the chain from the hash format and routes to the correct pipeline.
+
+## Architecture
+
+```
+Telegram Bot (@ExploraiBot)
+         │
+         ▼
+  Mini App (Vercel)
+    Vite + React + Tailwind v4
+    Telegram WebApp auth
+         │
+         ▼ SSE stream
+  Backend (Express API)
+    ├── TON pipeline
+    │     TonAPI → trace normalizer → token flow extractor → AI agent
+    ├── EVM pipeline
+    │     Tenderly → call normalizer → token flows → AI agent
+    └── Solana pipeline
+          Helius/RPC → instruction normalizer → IDL decoder → AI agent
+         │
+         ▼
+  LLM (Claude Haiku via OpenRouter)
+    Agentic loop with tools: call tree, token flows,
+    risk detection, failure analysis, source lookup
+```
+
+### TON Pipeline Detail
+
+```
+TON tx hash
+     │
+     ▼
+TonAPI /v2/traces/{hash} — full message trace tree
+TonAPI /v2/events/{hash} — decoded events (Jetton transfers, etc.)
+     │
+     ▼
+ton-normalizer — recursive trace → NormalizedCall tree
+  (MESSAGE calls, BOUNCE for bounced messages, contract names from registry)
+     │
+     ▼
+ton-tokenflow — extract from events:
+  • Jetton transfers (mint/burn/transfer with amounts + symbols)
+  • Native TON value transfers
+     │
+     ▼
+ton-agent — LLM with TON-specific system prompt
+  Tools: get_call_tree, get_token_flows, get_risk_flags
+  Up to 12 autonomous tool-calling turns
+     │
+     ▼
+Structured AnalysisResult streamed via SSE to Mini App
+```
 
 ## Stack
 
 | Layer | Tech |
 |---|---|
-| Backend | Node.js + TypeScript + Express (port 3001) |
-| Mini App | Vite + React + Tailwind v4 — Telegram Mini App |
-| AI | Configurable LLM via OpenRouter (default: claude-haiku-4-5) |
+| Mini App | Vite + React + Tailwind v4 (Telegram Mini App) |
+| Backend | Node.js + TypeScript + Express |
+| AI | Claude Haiku 4.5 via OpenRouter (agentic tool-calling loop) |
+| TON Data | TonAPI (tonapi.io) |
 | EVM Simulation | Tenderly REST API |
-| Solana RPC | Helius / public Solana endpoints |
-| TON RPC | TonAPI (tonapi.io) |
-| Source lookup | Etherscan V2 API |
-| On-chain reads | Foundry `cast` |
-| Testing | Vitest |
-| CI/CD | GitHub Actions |
-| Monorepo | npm workspaces |
-
-## Prerequisites
-
-- Node.js 20+
-- [Foundry](https://getfoundry.sh/) installed (`cast` must be in PATH)
-- Tenderly account (free tier works)
-- Etherscan API key
-- OpenRouter API key
+| Solana RPC | Helius / public endpoints |
+| Auth | Telegram `initData` HMAC-SHA256 validation |
+| Monorepo | npm workspaces (shared, backend, mini-app, mcp) |
 
 ## Setup
 
@@ -49,223 +109,77 @@ An agentic multi-chain transaction debugger. Paste a transaction hash, and an LL
 git clone <repo>
 cd Debugger
 npm install
+cp .env.example packages/backend/.env
+# Fill in your API keys (see .env.example for all options)
 ```
 
-Copy `.env.example` to `packages/backend/.env` and fill in your keys:
+Key env vars:
 
 ```env
-# OpenRouter (https://openrouter.ai/keys)
-OPEN_ROUTER_API_KEY=sk-or-...
-LLM_MODEL=anthropic/claude-haiku-4-5    # optional
-
-# Tenderly (https://dashboard.tenderly.co/account/authorization)
-TENDERLY_ACCESS_KEY=...
-TENDERLY_ACCOUNT_SLUG=...
-TENDERLY_PROJECT_SLUG=...
-
-# Etherscan V2 key — works for all chains (https://etherscan.io/myapikey)
-ETHERSCAN_API_KEY=...
-
-# Alchemy key — auto-used for 10 supported chains (optional)
-ALCHEMY_API_KEY=...
-
-# Solana — Helius API key for enriched data (optional)
-HELIUS_API_KEY=...
-
-# TON — TonAPI key for higher rate limits (optional)
-TONAPI_KEY=...
-
-# Telegram Mini App auth (from @BotFather)
-BOT_TOKEN=...
+OPEN_ROUTER_API_KEY=sk-or-...       # LLM provider
+TONAPI_KEY=...                       # TonAPI (optional, improves rate limits)
+BOT_TOKEN=...                        # Telegram bot token from @BotFather
+TENDERLY_ACCESS_KEY=...              # EVM simulation (for multi-chain support)
 ```
 
 ## Development
 
 ```bash
-# Terminal 1 — backend
-npm run dev:backend
-
-# Terminal 2 — Telegram mini app
-npm run dev:mini-app
+npm run dev:backend    # Express API on :3001
+npm run dev:mini-app   # Telegram Mini App on :5174 (proxies /api to backend)
 ```
-
-| App | URL |
-|---|---|
-| Mini App | http://localhost:5174 |
-| Backend | http://localhost:3001 |
-
-## Testing
-
-```bash
-npm test
-```
-
-## How It Works
-
-### EVM Transactions
-
-```
-User pastes tx hash
-       │
-       ▼
-Auto-detect chain (parallel RPC probing across all configured chains)
-       │
-       ▼
-Tenderly /simulate — full call trace + asset changes
-       │
-       ▼
-normalizer — NormalizedCall tree
-       │
-       ▼
-LLM agent loop (up to 12 turns)
-  ├── get_call_tree
-  ├── analyze_failure
-  ├── extract_token_flows
-  ├── detect_semantic_actions
-  ├── detect_risks
-  ├── get_contract_abi (Etherscan)
-  ├── get_revert_source_location (Etherscan V2)
-  ├── cast_call / cast_run (Foundry)
-  └── simulate_with_fix (Tenderly state overrides)
-       │
-       ▼
-Final analysis streamed via SSE
-```
-
-### Solana Transactions
-
-```
-User pastes Solana tx signature
-       │
-       ▼
-Solana RPC / Helius — fetch parsed transaction
-       │
-       ▼
-solana-normalizer — NormalizedInstruction tree
-       │
-       ▼
-solana-idl — decode instruction data via on-chain IDLs
-       │
-       ▼
-solana-tokenflow — extract token transfers and balance changes
-       │
-       ▼
-Solana agent loop → final analysis
-```
-
-### TON Transactions
-
-```
-User pastes TON tx hash
-       │
-       ▼
-TonAPI — fetch trace tree + events
-       │
-       ▼
-ton-normalizer — NormalizedCall tree (MESSAGE/BOUNCE call types)
-       │
-       ▼
-ton-tokenflow — Jetton + native TON transfers from events
-       │
-       ▼
-TON agent loop (with TON-specific system prompt) → final analysis
-```
-
-## MCP Server (Claude Code Integration)
-
-The debugger can be used as MCP tools inside [Claude Code](https://claude.com/claude-code).
-
-### Setup
-
-```bash
-claude mcp add debugger -- npx tsx packages/mcp/src/index.ts
-```
-
-Make sure `packages/backend/.env` is configured. The MCP server imports backend services directly — it does **not** call the HTTP API.
-
-### Available Tools
-
-| Tool | Description |
-|---|---|
-| `debug_transaction` | Full debug pipeline: call tree, token flows, risk flags, failure analysis |
-| `get_call_tree` | Fetch only the call trace |
-| `get_token_flows` | Fetch only token transfers and balance changes |
-| `get_risk_flags` | Fetch only risk/security flags |
-| `resolve_rango_swap` | Look up a Rango cross-chain swap by UUID |
 
 ## Project Structure
 
 ```
 packages/
-  shared/         # Shared TypeScript types (tenderly, analysis, api, solana, ton, rango)
+  shared/       # TypeScript types (analysis, api, ton, solana, tenderly, rango)
   backend/
     src/
-      routes/     # debug.route.ts (POST + SSE), qa.route.ts, rango.route.ts
-      services/   # agent, etherscan, tenderly, ethers, foundry,
-                  # tokenflow, action, failure, risk, normalizer,
-                  # simulate-fix, cache, llm, openai, usage,
-                  # solana-rpc, solana-normalizer, solana-idl,
-                  # solana-tokenflow, solana-agent,
-                  # ton-rpc, ton-normalizer, ton-tokenflow, ton-agent,
-                  # rango
-      registry/   # selectors.ts — known EVM function selectors
-                  # solana-programs.ts — known Solana program IDs
-                  # solana-errors.ts — known Solana error codes
-                  # ton-contracts.ts — known TON contracts & op-codes
-      middleware/ # error, telegram-auth (HMAC-SHA256 validation)
-      __tests__/  # vitest unit tests
+      services/
+        ton-rpc.service.ts          # TonAPI fetch (traces + events)
+        ton-normalizer.service.ts   # Trace → NormalizedCall tree
+        ton-tokenflow.service.ts    # Events → Jetton/TON transfers
+        ton-agent.service.ts        # TON-specific AI agent loop
+        agent.service.ts            # EVM AI agent loop
+        solana-agent.service.ts     # Solana AI agent loop
+        ...
+      registry/
+        ton-contracts.ts            # Known TON contracts, Jettons, op-codes
+        selectors.ts                # Known EVM function selectors
+        solana-programs.ts          # Known Solana program IDs
+      middleware/
+        telegram-auth.middleware.ts  # HMAC-SHA256 initData validation
+      routes/
+        debug.route.ts              # /api/debug + /api/debug/stream (SSE)
+        qa.route.ts                 # /api/qa (follow-up questions)
   mini-app/
-    src/
-      app/        # Telegram Mini App — Chat, History, Risk screens
-                  # Auth via Telegram WebApp initData
-                  # SSE streaming via fetch (for auth headers)
-  mcp/            # MCP server (stdio) — exposes debugger as Claude CLI tools
+    src/app/
+      screens/    # ChatScreen, HistoryScreen, RiskDetailScreen
+      api.ts      # Backend client with Telegram auth headers
+      store.ts    # App state (history, current analysis)
+      App.tsx     # Auth gate + router
+  mcp/            # MCP server for Claude Code integration
 ```
 
 ## API
 
-### `GET /api/debug/stream?txHash=0x...`
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/debug/stream?txHash=...` | GET | SSE stream — real-time analysis with tool-call events |
+| `/api/debug` | POST | One-shot analysis (returns full `AnalysisResult`) |
+| `/api/qa` | POST | Follow-up questions about a transaction |
+| `/api/auth/check` | GET | Verify Telegram `initData` session |
+| `/api/usage` | GET | Per-user usage stats (requires Telegram auth) |
 
-SSE stream. `networkId` is optional — auto-detected from hash format if omitted.
+Network is auto-detected from the hash format. No chain selector needed.
 
-Events:
+## MCP Server
 
-```jsonc
-{ "type": "step",        "message": "Detected network: 1" }
-{ "type": "tool_call",   "turn": 1, "toolNames": ["get_call_tree"] }
-{ "type": "tool_result", "turn": 1, "toolName": "get_call_tree", "summary": "CALL 0x..." }
-{ "type": "complete",    "result": { /* AnalysisResult */ } }
-{ "type": "error",       "message": "..." }
+Explorai also works as an MCP tool inside [Claude Code](https://claude.com/claude-code):
+
+```bash
+claude mcp add debugger -- npx tsx packages/mcp/src/index.ts
 ```
 
-### `POST /api/debug`
-
-```json
-{ "txHash": "0x...", "networkId": "1" }
-```
-
-Returns `AnalysisResult`.
-
-### `POST /api/rango/resolve`
-
-```json
-{ "swapId": "uuid-string" }
-```
-
-Returns cross-chain swap overview with step-by-step route details.
-
-### `POST /api/qa`
-
-```json
-{ "question": "Why did the approval fail?", "context": { /* AnalysisResult */ } }
-```
-
-Returns `{ "answer": "..." }`.
-
-### `GET /api/auth/check`
-
-Requires `X-Telegram-Init-Data` header. Returns `{ "ok": true, "user": { ... } }`.
-
-### `GET /api/usage`
-
-Requires Telegram auth. Returns per-user and global usage statistics.
+Tools: `debug_transaction`, `get_call_tree`, `get_token_flows`, `get_risk_flags`, `resolve_rango_swap`
