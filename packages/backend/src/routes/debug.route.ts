@@ -21,8 +21,51 @@ import type { AnalysisResult, NormalizedCall } from '@debugger/shared';
 export const debugRouter = Router();
 
 /** Flatten a call tree into a flat list */
-function flattenTonCalls(node: NormalizedCall): NormalizedCall[] {
-  return [node, ...node.children.flatMap(flattenTonCalls)];
+function flattenCalls(node: NormalizedCall): NormalizedCall[] {
+  return [node, ...node.children.flatMap(flattenCalls)];
+}
+
+/** Extract human-readable labels for all addresses found in the analysis */
+function buildAddressLabels(result: Omit<AnalysisResult, 'addressLabels' | 'analyzedAt'>): Record<string, string> {
+  const labels: Record<string, string> = {};
+
+  // From call tree: contract names + protocol names
+  for (const call of flattenCalls(result.callTree)) {
+    const addr = call.callee?.toLowerCase();
+    if (!addr || labels[addr]) continue;
+    if (call.contractName) {
+      labels[addr] = call.contractName;
+    } else if (call.protocol) {
+      labels[addr] = call.protocol;
+    }
+    // Also label callers if they have names
+    const callerAddr = call.caller?.toLowerCase();
+    if (callerAddr && !labels[callerAddr] && call.contractName) {
+      // Don't overwrite — caller might have its own name from another call
+    }
+  }
+
+  // From token flows: label token addresses with symbol
+  for (const flow of result.tokenFlows) {
+    const tokenAddr = flow.tokenAddress?.toLowerCase();
+    if (tokenAddr && !labels[tokenAddr]) {
+      labels[tokenAddr] = flow.tokenSymbol || flow.tokenName;
+    }
+  }
+
+  // From semantic actions: protocol + involved addresses
+  for (const action of result.semanticActions) {
+    if (action.protocol) {
+      for (const addr of action.involvedAddresses) {
+        const lower = addr.toLowerCase();
+        if (!labels[lower]) {
+          labels[lower] = action.protocol;
+        }
+      }
+    }
+  }
+
+  return labels;
 }
 
 // ─── Shared analysis pipeline ─────────────────────────────────────────────────
@@ -67,7 +110,7 @@ async function runSolanaPipeline(
     onAgentProgress,
   );
 
-  const result: AnalysisResult = {
+  const partial = {
     txHash,
     networkId,
     success: agentResult.success,
@@ -79,6 +122,10 @@ async function runSolanaPipeline(
     riskFlags: agentResult.riskFlags,
     failureReason: agentResult.failureReason,
     llmExplanation: agentResult.llmExplanation,
+  };
+  const result: AnalysisResult = {
+    ...partial,
+    addressLabels: buildAddressLabels(partial),
     analyzedAt: new Date().toISOString(),
   };
 
@@ -128,13 +175,13 @@ async function runTonPipeline(
   // In TON, root tx can "succeed" but child messages bounce or event actions fail.
   // Mark as failed if any messages bounced, child calls failed, or event actions failed.
   const hasBounces = agentResult.riskFlags.some(f => f.type === 'BOUNCED_MESSAGE');
-  const hasFailedChildren = flattenTonCalls(agentResult.callTree).some(
+  const hasFailedChildren = flattenCalls(agentResult.callTree).some(
     c => !c.success && c.callType !== 'BOUNCE',
   );
   const hasFailedEventActions = txData.eventActions?.some((a: { status: string }) => a.status === 'failed') ?? false;
   const effectiveSuccess = agentResult.success && !hasBounces && !hasFailedChildren && !hasFailedEventActions;
 
-  const result: AnalysisResult = {
+  const partial = {
     txHash,
     networkId,
     success: effectiveSuccess,
@@ -146,6 +193,10 @@ async function runTonPipeline(
     riskFlags: agentResult.riskFlags,
     failureReason: agentResult.failureReason,
     llmExplanation: agentResult.llmExplanation,
+  };
+  const result: AnalysisResult = {
+    ...partial,
+    addressLabels: buildAddressLabels(partial),
     analyzedAt: new Date().toISOString(),
   };
 
@@ -194,7 +245,7 @@ async function runEvmPipeline(
     onAgentProgress,
   );
 
-  const result: AnalysisResult = {
+  const partial = {
     txHash,
     networkId,
     success: agentResult.success,
@@ -206,6 +257,10 @@ async function runEvmPipeline(
     riskFlags: agentResult.riskFlags,
     failureReason: agentResult.failureReason,
     llmExplanation: agentResult.llmExplanation,
+  };
+  const result: AnalysisResult = {
+    ...partial,
+    addressLabels: buildAddressLabels(partial),
     analyzedAt: new Date().toISOString(),
   };
 

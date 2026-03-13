@@ -95,5 +95,7 @@ export interface AnalysisResult {
   riskFlags: RiskFlag[];
   failureReason?: FailureReason;
   llmExplanation: string;
+  /** Human-readable labels for addresses (e.g. "Uniswap V3 Router", "USDC Token") */
+  addressLabels: Record<string, string>;
   analyzedAt: string;
 }

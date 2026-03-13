@@ -9,11 +9,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import type { AnalysisResult, NormalizedCall } from "../api";
-
-function truncAddr(addr: string): string {
-  if (addr.length <= 16) return addr;
-  return `${addr.slice(0, 8)}...${addr.slice(-6)}`;
-}
+import { AddressChip } from "./AddressChip";
 
 function formatGas(result: AnalysisResult): string {
   if (result.networkId.startsWith("ton-")) {
@@ -134,8 +130,14 @@ function renderInline(text: string): React.ReactNode[] {
   return parts;
 }
 
+function getLabel(address: string, labels?: Record<string, string>): string | undefined {
+  if (!labels) return undefined;
+  return labels[address] ?? labels[address.toLowerCase()];
+}
+
 export function AnalysisResultCard({ analysis }: { analysis: AnalysisResult }) {
   const navigate = useNavigate();
+  const labels = analysis.addressLabels;
   const [expandedSections, setExpandedSections] = useState({
     callTrace: false,
     tokenFlows: false,
@@ -216,9 +218,10 @@ export function AnalysisResultCard({ analysis }: { analysis: AnalysisResult }) {
                     <XCircle className="w-3.5 h-3.5 text-[#E74C3C] flex-shrink-0" />
                   )}
                 </div>
-                <span className="text-[#8B8E96] text-[11px] font-mono truncate block">
-                  {call.contractName ?? truncAddr(call.callee)}
-                </span>
+                <AddressChip
+                  address={call.callee}
+                  label={call.contractName ?? getLabel(call.callee, labels)}
+                />
               </div>
             </div>
           ))}
@@ -239,9 +242,9 @@ export function AnalysisResultCard({ analysis }: { analysis: AnalysisResult }) {
             {analysis.tokenFlows.map((flow, index) => (
               <div key={index} className="bg-[#0F1117] rounded-lg p-3">
                 <div className="flex items-center gap-1.5 mb-2 min-w-0">
-                  <span className="text-[11px] text-[#8B8E96] font-mono truncate flex-shrink min-w-0">{truncAddr(flow.from)}</span>
+                  <AddressChip address={flow.from} label={getLabel(flow.from, labels)} />
                   <ArrowRight className="w-3.5 h-3.5 text-[#0098EA] flex-shrink-0" />
-                  <span className="text-[11px] text-[#8B8E96] font-mono truncate flex-shrink min-w-0">{truncAddr(flow.to)}</span>
+                  <AddressChip address={flow.to} label={getLabel(flow.to, labels)} />
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-5 h-5 rounded-full bg-[#0098EA]/10 flex items-center justify-center text-[10px] text-[#0098EA] flex-shrink-0">

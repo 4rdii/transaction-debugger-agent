@@ -110,6 +110,7 @@ export interface AnalysisResult {
   riskFlags: RiskFlag[];
   failureReason?: FailureReason;
   llmExplanation: string;
+  addressLabels?: Record<string, string>;
   analyzedAt: string;
 }
 

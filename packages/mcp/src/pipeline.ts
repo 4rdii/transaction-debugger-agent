@@ -68,6 +68,7 @@ async function runEvmPipeline(
     riskFlags: agentResult.riskFlags,
     failureReason: agentResult.failureReason,
     llmExplanation: agentResult.llmExplanation,
+    addressLabels: {},
     analyzedAt: new Date().toISOString(),
   };
 
@@ -112,6 +113,7 @@ async function runSolanaPipeline(
     riskFlags: agentResult.riskFlags,
     failureReason: agentResult.failureReason,
     llmExplanation: agentResult.llmExplanation,
+    addressLabels: {},
     analyzedAt: new Date().toISOString(),
   };
 
@@ -158,6 +160,7 @@ async function runTonPipeline(
     riskFlags: agentResult.riskFlags,
     failureReason: agentResult.failureReason,
     llmExplanation: agentResult.llmExplanation,
+    addressLabels: {},
     analyzedAt: new Date().toISOString(),
   };
 

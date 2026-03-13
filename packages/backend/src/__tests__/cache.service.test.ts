@@ -37,6 +37,7 @@ function makeResult(txHash: string, networkId = '1'): AnalysisResult {
     semanticActions: [],
     riskFlags: [],
     llmExplanation: 'test explanation',
+    addressLabels: {},
     analyzedAt: new Date().toISOString(),
   };
 }
