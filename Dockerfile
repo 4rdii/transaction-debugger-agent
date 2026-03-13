@@ -21,7 +21,6 @@ COPY package.json package-lock.json ./
 COPY packages/shared/package.json   ./packages/shared/
 COPY packages/backend/package.json  ./packages/backend/
 # These package.json files are needed for workspace resolution even though we don't build them
-COPY packages/frontend/package.json ./packages/frontend/
 COPY packages/mini-app/package.json ./packages/mini-app/
 COPY packages/mcp/package.json      ./packages/mcp/
 
