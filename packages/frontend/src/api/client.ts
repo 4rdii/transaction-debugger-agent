@@ -2,7 +2,9 @@ import type { DebugRequest, DebugResponse, QARequest, QAResponse, RangoResolveRe
 
 // In dev, VITE_API_URL is unset so relative paths are used (proxied by Vite to localhost:3001).
 // In production (Vercel), set VITE_API_URL=https://your-server.com:3001
-const API_BASE = ((import.meta.env.VITE_API_URL as string | undefined) ?? '').replace(/\/+$/, '');
+const RAW_API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
+const API_BASE = RAW_API_URL.replace(/\/+$/, '');
+console.log('[Explorai] VITE_API_URL raw:', JSON.stringify(RAW_API_URL), '→ API_BASE:', JSON.stringify(API_BASE));
 
 async function apiFetch<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -36,6 +38,7 @@ export function streamDebugTransaction(
   onEvent: (event: StreamEvent) => void,
 ): () => void {
   const url = `${API_BASE}/api/debug/stream?txHash=${encodeURIComponent(req.txHash)}&networkId=${encodeURIComponent(req.networkId)}`;
+  console.log('[Explorai] SSE connecting to:', url);
   const es = new EventSource(url);
 
   es.onmessage = (e: MessageEvent) => {
