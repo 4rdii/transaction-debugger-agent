@@ -49,9 +49,9 @@ app.get('/api/usage', requireTelegramAuth, (_req, res) => {
   res.json(getUsageStats());
 });
 
-// Routes — debug and QA require Telegram auth, rango uses optional
-app.use('/api/debug', debugLimiter, requireTelegramAuth, debugRouter);
-app.use('/api/qa', qaLimiter, requireTelegramAuth, qaRouter);
+// Routes — optional auth on debug/qa (tracks usage if Telegram user present), rango same
+app.use('/api/debug', debugLimiter, optionalTelegramAuth, debugRouter);
+app.use('/api/qa', qaLimiter, optionalTelegramAuth, qaRouter);
 app.use('/api/rango', debugLimiter, optionalTelegramAuth, rangoRouter);
 
 // Global error handler (must be last)
