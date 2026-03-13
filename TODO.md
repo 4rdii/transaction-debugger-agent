@@ -18,6 +18,9 @@ decrease MAX_TURNS
 - [ ] **`get_block_context(blockNumber, networkId)`** — block timestamp, base fee, gas limit; useful for deadline failures and EIP-1559 analysis
 - [ ] **`search_similar_failures(revertReason)`** — match against a local database of known failure patterns
 
+## Chain-specific Pre-context
+- [ ] **Chain-specific knowledge base** — provide the LLM with pre-analysis context tailored to each chain (e.g. TON op-codes, Solana program conventions, EVM precompiles) so the agent starts with domain expertise before tool calls
+
 ## Analysis
 - [ ] **MEV detection** — check block position for sandwich patterns (buy before + sell after by same address)
 - [ ] **Slippage calculator** — for failed swaps, compute what minAmountOut would have worked

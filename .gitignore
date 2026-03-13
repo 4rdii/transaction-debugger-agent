@@ -8,3 +8,5 @@ logs/
 *.d.ts.map
 tx-debugger.tar.gz
 docs/screenshots/*
+.vercel/
+.claude/
