@@ -1,10 +1,7 @@
-import { useNavigate } from "react-router";
-import { Sparkles, Shield, Zap, ArrowRight } from "lucide-react";
+import { Sparkles, Shield, Zap } from "lucide-react";
 import { motion } from "motion/react";
 
 export function OnboardingScreen() {
-  const navigate = useNavigate();
-
   return (
     <div className="min-h-screen bg-[#0F1117] flex flex-col items-center justify-center px-6 max-w-[400px] mx-auto">
       {/* Logo */}
@@ -57,18 +54,19 @@ export function OnboardingScreen() {
         />
       </motion.div>
 
-      {/* CTA */}
-      <motion.button
-        onClick={() => navigate("/chat")}
-        className="w-full h-12 bg-[#0098EA] text-white rounded-xl font-medium flex items-center justify-center gap-2 hover:bg-[#0088D4] transition-colors"
+      {/* CTA — open in Telegram */}
+      <motion.div
+        className="w-full text-center"
         initial={{ y: 16, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ delay: 0.45 }}
-        whileTap={{ scale: 0.98 }}
       >
-        Get Started
-        <ArrowRight className="w-4 h-4" />
-      </motion.button>
+        <p className="text-[#8B8E96] text-[14px]">
+          Open this app in{" "}
+          <span className="text-[#0098EA] font-medium">Telegram</span>{" "}
+          to get started.
+        </p>
+      </motion.div>
     </div>
   );
 }

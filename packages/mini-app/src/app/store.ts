@@ -1,9 +1,9 @@
 import { createContext, useContext } from 'react';
-import type { AnalysisResult, Chain } from './api';
+import type { AnalysisResult } from './api';
 
 export interface HistoryEntry {
   txHash: string;
-  chain: Chain;
+  networkId: string;
   status: 'Success' | 'Failed' | 'Pending';
   timestamp: string;
   result?: AnalysisResult;
@@ -12,17 +12,14 @@ export interface HistoryEntry {
 export interface AppState {
   history: HistoryEntry[];
   currentResult: AnalysisResult | null;
-  selectedChain: Chain;
 }
 
 export const initialState: AppState = {
   history: [],
   currentResult: null,
-  selectedChain: 'TON',
 };
 
 export type AppAction =
-  | { type: 'SET_CHAIN'; chain: Chain }
   | { type: 'SET_RESULT'; result: AnalysisResult }
   | { type: 'CLEAR_RESULT' }
   | { type: 'ADD_HISTORY'; entry: HistoryEntry }
@@ -30,8 +27,6 @@ export type AppAction =
 
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
-    case 'SET_CHAIN':
-      return { ...state, selectedChain: action.chain };
     case 'SET_RESULT':
       return { ...state, currentResult: action.result };
     case 'CLEAR_RESULT':

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { ArrowLeft, Search, CheckCircle2, XCircle, Clock } from "lucide-react";
 import { useApp } from "../store";
+import { networkLabel } from "../api";
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -28,7 +29,6 @@ export function HistoryScreen() {
   );
 
   const handleSelect = (entry: typeof state.history[0]) => {
-    dispatch({ type: "SET_CHAIN", chain: entry.chain });
     if (entry.result) {
       dispatch({ type: "SET_RESULT", result: entry.result });
     }
@@ -95,7 +95,7 @@ export function HistoryScreen() {
                 </div>
 
                 <div className="px-2.5 py-1 bg-[#0098EA]/10 rounded-full text-[12px] text-[#0098EA] ml-2 flex-shrink-0">
-                  {tx.chain}
+                  {networkLabel(tx.networkId)}
                 </div>
               </div>
             </button>

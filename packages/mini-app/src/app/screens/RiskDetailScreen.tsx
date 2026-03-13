@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from "react-router";
-import { ArrowLeft, MessageCircle } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { useApp } from "../store";
 
@@ -38,7 +38,7 @@ export function RiskDetailScreen() {
     <div className="min-h-screen bg-[#0F1117] max-w-[390px] mx-auto">
       {/* Header */}
       <div className="bg-[#1A1D27] border-b border-[#2A2D37] px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
-        <button onClick={() => navigate("/chat")} className="text-white hover:text-[#0098EA]">
+        <button onClick={() => navigate(-1)} className="text-white hover:text-[#0098EA]">
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div>
@@ -140,10 +140,6 @@ export function RiskDetailScreen() {
                   </div>
                 </div>
 
-                <button className="w-full mt-3 px-4 py-2 bg-[#0098EA]/10 text-[#0098EA] rounded-lg text-[13px] font-medium hover:bg-[#0098EA]/20 transition-colors flex items-center justify-center gap-2">
-                  <MessageCircle className="w-4 h-4" />
-                  Ask AI for Details
-                </button>
               </div>
             ))}
           </div>

@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router";
-import { ChevronDown, ArrowUp, History, Loader2, Sparkles } from "lucide-react";
+import { ArrowUp, History, Loader2, Sparkles } from "lucide-react";
 import { AnalysisResultCard } from "../components/AnalysisResultCard";
 import { TONFeaturesPanel } from "../components/TONFeaturesPanel";
 import { useApp } from "../store";
-import { streamAnalysis, askQuestion, CHAIN_TO_NETWORK_ID } from "../api";
-import type { Chain, AnalysisResult } from "../api";
+import { streamAnalysis, askQuestion } from "../api";
+import type { AnalysisResult } from "../api";
 import type { HistoryEntry } from "../store";
 
 type Message = {
@@ -19,16 +19,12 @@ export function ChatScreen() {
   const navigate = useNavigate();
   const location = useLocation();
   const { state, dispatch } = useApp();
-  const [showChainDropdown, setShowChainDropdown] = useState(false);
   const [input, setInput] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<(() => void) | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  const chains: Chain[] = ["TON", "ETH", "Polygon", "Arbitrum", "Base"];
-  const selectedChain = state.selectedChain;
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -85,14 +81,13 @@ export function ChatScreen() {
 
     if (isTxHash(text)) {
       const txHash = text;
-      const networkId = CHAIN_TO_NETWORK_ID[selectedChain];
       const statusId = (Date.now() + 1).toString();
       setMessages((prev) => [
         ...prev,
-        { id: statusId, type: "status", content: "Analyzing transaction..." },
+        { id: statusId, type: "status", content: "Detecting network & analyzing..." },
       ]);
 
-      const cancel = streamAnalysis(txHash, networkId, (event) => {
+      const cancel = streamAnalysis(txHash, (event) => {
         if (event.type === "step") {
           setMessages((prev) =>
             prev.map((m) => (m.id === statusId ? { ...m, content: event.message ?? "" } : m))
@@ -120,7 +115,7 @@ export function ChatScreen() {
             type: "ADD_HISTORY",
             entry: {
               txHash,
-              chain: selectedChain,
+              networkId: event.result!.networkId,
               status: event.result!.success ? "Success" : "Failed",
               timestamp: new Date().toISOString(),
               result: event.result!,
@@ -179,46 +174,12 @@ export function ChatScreen() {
           <span className="text-white font-medium text-[15px]">Explorai</span>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Chain Selector */}
-          <div className="relative">
-            <button
-              onClick={() => setShowChainDropdown(!showChainDropdown)}
-              className="px-3 py-1.5 border border-[#2A2D37] rounded-lg text-[13px] text-[#8B8E96] flex items-center gap-1.5 hover:border-[#3A3D47] transition-colors"
-            >
-              {selectedChain}
-              <ChevronDown className="w-3.5 h-3.5" />
-            </button>
-
-            {showChainDropdown && (
-              <div className="absolute top-full right-0 mt-1 bg-[#1A1D27] border border-[#2A2D37] rounded-lg overflow-hidden min-w-[120px] shadow-xl z-50">
-                {chains.map((chain) => (
-                  <button
-                    key={chain}
-                    onClick={() => {
-                      dispatch({ type: "SET_CHAIN", chain });
-                      setShowChainDropdown(false);
-                    }}
-                    className={`w-full px-4 py-2 text-left text-[13px] transition-colors ${
-                      chain === selectedChain
-                        ? "text-white bg-[#0098EA]/10"
-                        : "text-[#8B8E96] hover:text-white hover:bg-[#2A2D37]"
-                    }`}
-                  >
-                    {chain}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <button
-            onClick={() => navigate("/history")}
-            className="w-8 h-8 flex items-center justify-center text-[#8B8E96] hover:text-white transition-colors"
-          >
-            <History className="w-4 h-4" />
-          </button>
-        </div>
+        <button
+          onClick={() => navigate("/history")}
+          className="w-8 h-8 flex items-center justify-center text-[#8B8E96] hover:text-white transition-colors"
+        >
+          <History className="w-4 h-4" />
+        </button>
       </div>
 
       {/* Messages Area */}

@@ -7,6 +7,8 @@ import { debugRouter } from './routes/debug.route.js';
 import { qaRouter } from './routes/qa.route.js';
 import { rangoRouter } from './routes/rango.route.js';
 import { errorHandler } from './middleware/error.middleware.js';
+import { requireTelegramAuth, optionalTelegramAuth } from './middleware/telegram-auth.middleware.js';
+import { getUsageStats } from './services/usage.service.js';
 
 const app = express();
 
@@ -37,10 +39,20 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Routes
-app.use('/api/debug', debugLimiter, debugRouter);
-app.use('/api/qa', qaLimiter, qaRouter);
-app.use('/api/rango', debugLimiter, rangoRouter);
+// Auth check — mini-app calls this to verify Telegram auth
+app.get('/api/auth/check', requireTelegramAuth, (req, res) => {
+  res.json({ ok: true, user: req.telegramUser });
+});
+
+// Usage stats (protected — only accessible with valid Telegram auth)
+app.get('/api/usage', requireTelegramAuth, (_req, res) => {
+  res.json(getUsageStats());
+});
+
+// Routes — debug and QA require Telegram auth, rango uses optional
+app.use('/api/debug', debugLimiter, requireTelegramAuth, debugRouter);
+app.use('/api/qa', qaLimiter, requireTelegramAuth, qaRouter);
+app.use('/api/rango', debugLimiter, optionalTelegramAuth, rangoRouter);
 
 // Global error handler (must be last)
 app.use(errorHandler);
