@@ -6,8 +6,9 @@ import {
   getTokenFlows,
   getRiskFlags,
   resolveRangoSwap,
+  checkToken,
 } from './pipeline.js';
-import type { DebugData } from './pipeline.js';
+import type { DebugData, TokenCheckResult } from './pipeline.js';
 
 const MAX_TREE_DEPTH = 6;
 const MAX_TREE_LINES = 150;
@@ -224,6 +225,41 @@ export function registerTools(server: McpServer): void {
       const summary = `Swap: ${header}\nStatus: ${overview.status}\n\nSteps:\n${stepLines}\n\nTransactions:\n${txLines}`;
       return {
         content: [{ type: 'text', text: summary }],
+      };
+    },
+  );
+
+  // ── check_token (token maliciousness / quirk analysis) ─────────────
+  server.tool(
+    'check_token',
+    'Analyze a token contract for malicious or quirky patterns: fee-on-transfer, honeypot sell toggles, blacklists, max-tx limits, hidden mints, rebase mechanics, pausability, and more. Fetches verified source from Etherscan and runs static pattern detection. EVM only.',
+    {
+      tokenAddress: z.string().describe('Token contract address (0x...)'),
+      networkId: z.string().describe('EVM network ID: "1" (Ethereum), "137" (Polygon), "42161" (Arbitrum), "10" (Optimism), "8453" (Base), "56" (BSC), etc.'),
+    },
+    async ({ tokenAddress, networkId }) => {
+      const result = await checkToken(tokenAddress, Number(networkId));
+
+      const lines: string[] = [];
+      lines.push(`Token: ${tokenAddress} (network ${networkId})`);
+      lines.push(`Contract: ${result.contractName ?? 'Unknown'}`);
+      lines.push(`Verified: ${result.verified ? 'Yes' : 'No'}`);
+      lines.push('');
+
+      if (result.flags.length === 0) {
+        lines.push('No flags detected.');
+      } else {
+        lines.push(`== TOKEN FLAGS (${result.flags.length}) ==`);
+        for (const f of result.flags) {
+          lines.push(`[${f.level.toUpperCase()}] ${f.type}: ${f.description}`);
+          if (f.evidence) {
+            lines.push(`  Evidence: "${f.evidence}"`);
+          }
+        }
+      }
+
+      return {
+        content: [{ type: 'text', text: lines.join('\n') }],
       };
     },
   );

@@ -22,10 +22,12 @@ import { normalizeTonTransaction } from '../../backend/src/services/ton-normaliz
 import { extractTonTokenFlows } from '../../backend/src/services/ton-tokenflow.service.js';
 import { runTonAnalysisAgent } from '../../backend/src/services/ton-agent.service.js';
 import { resolveRangoSwap } from '../../backend/src/services/rango.service.js';
+import { checkToken, type TokenCheckResult } from '../../backend/src/services/token-check.service.js';
 import type { AnalysisResult, NormalizedCall, TokenFlow, RiskFlag, SemanticAction, FailureReason } from '@debugger/shared';
 
 // Re-export for tools.ts
-export { resolveRangoSwap };
+export { resolveRangoSwap, checkToken };
+export type { TokenCheckResult };
 
 // ── Full debug pipeline ──────────────────────────────────────────────
 
