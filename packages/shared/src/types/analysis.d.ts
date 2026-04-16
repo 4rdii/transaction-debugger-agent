@@ -1,4 +1,4 @@
-export type CallType = 'CALL' | 'DELEGATECALL' | 'STATICCALL' | 'CREATE' | 'CREATE2' | 'INVOKE' | 'CPI';
+export type CallType = 'CALL' | 'DELEGATECALL' | 'STATICCALL' | 'CREATE' | 'CREATE2' | 'INVOKE' | 'CPI' | 'MESSAGE' | 'BOUNCE';
 export interface DecodedParam {
     name: string;
     type: string;
@@ -23,7 +23,7 @@ export interface NormalizedCall {
     action?: string;
     children: NormalizedCall[];
 }
-export type TokenFlowType = 'Transfer' | 'Mint' | 'Burn' | 'NativeTransfer';
+export type TokenFlowType = 'Transfer' | 'Mint' | 'Burn' | 'NativeTransfer' | 'SwapIn' | 'SwapOut';
 export interface TokenFlow {
     type: TokenFlowType;
     from: string;
@@ -36,7 +36,7 @@ export interface TokenFlow {
     formattedAmount: string;
     dollarValue?: string;
 }
-export type SemanticActionType = 'Swap' | 'Approve' | 'Bridge' | 'Deposit' | 'Withdraw' | 'Liquidation' | 'Flashloan' | 'Transfer' | 'Multicall' | 'Unknown';
+export type SemanticActionType = 'Swap' | 'Approve' | 'Bridge' | 'Deposit' | 'Withdraw' | 'Liquidation' | 'Flashloan' | 'Transfer' | 'Multicall' | 'Burn' | 'Mint' | 'ContractCreation' | 'ContractInteraction' | 'Unknown';
 export interface SemanticAction {
     type: SemanticActionType;
     protocol?: string;
@@ -69,6 +69,8 @@ export interface AnalysisResult {
     riskFlags: RiskFlag[];
     failureReason?: FailureReason;
     llmExplanation: string;
+    /** Human-readable labels for addresses (e.g. "Uniswap V3 Router", "USDC Token") */
+    addressLabels: Record<string, string>;
     analyzedAt: string;
 }
 //# sourceMappingURL=analysis.d.ts.map

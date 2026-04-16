@@ -1,0 +1,121 @@
+.tree {
+  overflow-x: auto;
+}
+
+.title {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.node {
+  margin-left: 0;
+  border-left: 1px solid #21262d;
+  padding-left: 0;
+}
+
+.nodeHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.6;
+  transition: background 0.1s;
+  flex-wrap: wrap;
+}
+
+.nodeHeader:hover {
+  background: #161b22;
+}
+
+.success {
+  border-left: 2px solid transparent;
+}
+
+.failure {
+  border-left: 2px solid #f85149;
+  background: rgba(248, 81, 73, 0.05);
+}
+
+.toggle {
+  color: #8b949e;
+  font-size: 10px;
+  width: 12px;
+  flex-shrink: 0;
+}
+
+.callType {
+  font-weight: 700;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.contract {
+  color: #e6edf3;
+  font-weight: 600;
+}
+
+.fn {
+  color: #d2a8ff;
+}
+
+.protocol {
+  color: #f78166;
+  font-size: 10px;
+  background: rgba(247, 129, 102, 0.1);
+  border: 1px solid rgba(247, 129, 102, 0.3);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+.gas {
+  margin-left: auto;
+  color: #8b949e;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.revert {
+  color: #f85149;
+  font-size: 11px;
+}
+
+.params {
+  margin-left: 20px;
+  padding: 4px 8px;
+  background: #0d1117;
+  border-left: 1px solid #21262d;
+}
+
+.param {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  padding: 1px 0;
+}
+
+.paramType {
+  color: #7ee787;
+  flex-shrink: 0;
+}
+
+.paramName {
+  color: #79c0ff;
+  flex-shrink: 0;
+}
+
+.paramValue {
+  color: #8b949e;
+  word-break: break-all;
+}
+
+.children {
+  margin-left: 20px;
+  border-left: 1px solid #21262d;
+  padding-left: 0;
+}
