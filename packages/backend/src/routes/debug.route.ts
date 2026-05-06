@@ -6,6 +6,22 @@ import { fetchTxParams } from '../services/ethers.service.js';
 import { simulateTransaction } from '../services/tenderly.service.js';
 import { normalizeCallTrace } from '../services/normalizer.service.js';
 import { runAnalysisAgent } from '../services/agent.service.js';
+import { buildFallbackAnalysis } from '../services/fallback-analysis.service.js';
+import type { RiskFlag } from '@debugger/shared';
+
+/** Deduplicate risk flags by (type, callId) when merging agent output with fallback output. */
+function mergeUniqueRiskFlags(a: RiskFlag[], b: RiskFlag[]): RiskFlag[] {
+  const seen = new Set<string>();
+  const out: RiskFlag[] = [];
+  for (const rf of [...a, ...b]) {
+    const key = `${rf.type}::${rf.callId ?? ''}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(rf);
+    }
+  }
+  return out;
+}
 import type { AgentProgressEvent } from '../services/agent.service.js';
 import { getCached, setCached } from '../services/cache.service.js';
 import { isSolanaNetwork, isTonNetwork, config } from '../config.js';
@@ -95,25 +111,33 @@ async function runSolanaPipeline(
   const callTree = normalizeSolanaTransaction(txData);
 
   onStep?.('Starting Solana AI agent...');
-  const agentResult = await runSolanaAnalysisAgent(
-    {
-      signature: txHash,
-      networkId,
-      success: txData.success,
-      computeUnitsConsumed: txData.computeUnitsConsumed,
-      slot: txData.slot,
-      fee: txData.fee,
-      callTree,
-      txData,
-      tokenFlows: [],
-      semanticActions: [],
-      riskFlags: [],
-      failureReason: undefined,
-    },
-    onAgentProgress,
-  );
+  let agentResult: Awaited<ReturnType<typeof runSolanaAnalysisAgent>> | null = null;
+  let agentError: string | null = null;
+  try {
+    agentResult = await runSolanaAnalysisAgent(
+      {
+        signature: txHash,
+        networkId,
+        success: txData.success,
+        computeUnitsConsumed: txData.computeUnitsConsumed,
+        slot: txData.slot,
+        fee: txData.fee,
+        callTree,
+        txData,
+        tokenFlows: [],
+        semanticActions: [],
+        riskFlags: [],
+        failureReason: undefined,
+      },
+      onAgentProgress,
+    );
+  } catch (err) {
+    agentError = err instanceof Error ? err.message : String(err);
+    console.warn(`[solana] AI agent failed: ${agentError}. Returning raw normalized data.`);
+    onStep?.('AI agent unavailable — returning normalized data without narrative.');
+  }
 
-  const partial = {
+  const partial = agentResult ? {
     txHash,
     networkId,
     success: agentResult.success,
@@ -125,10 +149,26 @@ async function runSolanaPipeline(
     riskFlags: agentResult.riskFlags,
     failureReason: agentResult.failureReason,
     llmExplanation: agentResult.llmExplanation,
+  } : {
+    txHash,
+    networkId,
+    success: txData.success,
+    gasUsed: txData.computeUnitsConsumed,
+    blockNumber: txData.slot,
+    callTree,
+    tokenFlows: [],
+    semanticActions: [],
+    riskFlags: [{
+      level: 'low' as const,
+      type: 'AI_AGENT_UNAVAILABLE',
+      description: `AI narrative generation failed: ${agentError ?? 'unknown'}. Raw normalized instruction tree is still available.`,
+    }],
+    failureReason: undefined,
+    llmExplanation: '',
   };
   const result: AnalysisResult = {
     ...partial,
-    addressLabels: { ...buildAddressLabels(partial), ...(agentResult.llmAddressLabels ?? {}) },
+    addressLabels: { ...buildAddressLabels(partial), ...(agentResult?.llmAddressLabels ?? {}) },
     analyzedAt: new Date().toISOString(),
   };
 
@@ -155,51 +195,81 @@ async function runTonPipeline(
   const callTree = normalizeTonTransaction(txData);
 
   onStep?.('Starting TON AI agent...');
-  const agentResult = await runTonAnalysisAgent(
-    {
+  let agentResult: Awaited<ReturnType<typeof runTonAnalysisAgent>> | null = null;
+  let agentError: string | null = null;
+  try {
+    agentResult = await runTonAnalysisAgent(
+      {
+        txHash,
+        networkId,
+        success: txData.success,
+        exitCode: txData.exitCode,
+        lt: txData.lt,
+        utime: txData.utime,
+        fee: txData.fee,
+        account: txData.account,
+        callTree,
+        txData,
+        tokenFlows: [],
+        semanticActions: [],
+        riskFlags: [],
+        failureReason: undefined,
+      },
+      onAgentProgress,
+    );
+  } catch (err) {
+    agentError = err instanceof Error ? err.message : String(err);
+    console.warn(`[ton] AI agent failed: ${agentError}. Returning raw normalized data.`);
+    onStep?.('AI agent unavailable — returning normalized data without narrative.');
+  }
+
+  let partial;
+  let extraLabels: Record<string, string> = {};
+  if (agentResult) {
+    // In TON, root tx can "succeed" but child messages bounce or event actions fail.
+    const hasBounces = agentResult.riskFlags.some(f => f.type === 'BOUNCED_MESSAGE');
+    const hasFailedChildren = flattenCalls(agentResult.callTree).some(
+      c => !c.success && c.callType !== 'BOUNCE',
+    );
+    const hasFailedEventActions = txData.eventActions?.some((a: { status: string }) => a.status === 'failed') ?? false;
+    const effectiveSuccess = agentResult.success && !hasBounces && !hasFailedChildren && !hasFailedEventActions;
+
+    partial = {
+      txHash,
+      networkId,
+      success: effectiveSuccess,
+      gasUsed: Number(agentResult.fee),
+      blockNumber: Number(agentResult.lt),
+      callTree: agentResult.callTree,
+      tokenFlows: agentResult.tokenFlows,
+      semanticActions: agentResult.semanticActions,
+      riskFlags: agentResult.riskFlags,
+      failureReason: agentResult.failureReason,
+      llmExplanation: agentResult.llmExplanation,
+    };
+    extraLabels = agentResult.llmAddressLabels ?? {};
+  } else {
+    partial = {
       txHash,
       networkId,
       success: txData.success,
-      exitCode: txData.exitCode,
-      lt: txData.lt,
-      utime: txData.utime,
-      fee: txData.fee,
-      account: txData.account,
+      gasUsed: Number(txData.fee),
+      blockNumber: Number(txData.lt),
       callTree,
-      txData,
       tokenFlows: [],
       semanticActions: [],
-      riskFlags: [],
+      riskFlags: [{
+        level: 'low' as const,
+        type: 'AI_AGENT_UNAVAILABLE',
+        description: `AI narrative generation failed: ${agentError ?? 'unknown'}. Raw TON message tree is still available.`,
+      }],
       failureReason: undefined,
-    },
-    onAgentProgress,
-  );
-
-  // In TON, root tx can "succeed" but child messages bounce or event actions fail.
-  // Mark as failed if any messages bounced, child calls failed, or event actions failed.
-  const hasBounces = agentResult.riskFlags.some(f => f.type === 'BOUNCED_MESSAGE');
-  const hasFailedChildren = flattenCalls(agentResult.callTree).some(
-    c => !c.success && c.callType !== 'BOUNCE',
-  );
-  const hasFailedEventActions = txData.eventActions?.some((a: { status: string }) => a.status === 'failed') ?? false;
-  const effectiveSuccess = agentResult.success && !hasBounces && !hasFailedChildren && !hasFailedEventActions;
-
-  const partial = {
-    txHash,
-    networkId,
-    success: effectiveSuccess,
-    gasUsed: Number(agentResult.fee),
-    blockNumber: Number(agentResult.lt),
-    callTree: agentResult.callTree,
-    tokenFlows: agentResult.tokenFlows,
-    semanticActions: agentResult.semanticActions,
-    riskFlags: agentResult.riskFlags,
-    failureReason: agentResult.failureReason,
-    llmExplanation: agentResult.llmExplanation,
-  };
+      llmExplanation: '',
+    };
+  }
   const result: AnalysisResult = {
     ...partial,
-    addressLabels: { ...buildAddressLabels(partial, txData.accountNames), ...(agentResult.llmAddressLabels ?? {}) },
+    addressLabels: { ...buildAddressLabels(partial, txData.accountNames), ...extraLabels },
     analyzedAt: new Date().toISOString(),
   };
 
@@ -222,48 +292,148 @@ async function runEvmPipeline(
   onStep?.('Fetching transaction from RPC...');
   const txParams = await fetchTxParams(txHash, networkId);
 
+  // ── Tenderly simulation (graceful fallback) ───────────────────────────────
   onStep?.('Simulating on Tenderly...');
-  const simulation = await simulateTransaction(txParams, networkId);
+  let simulation: Awaited<ReturnType<typeof simulateTransaction>> | null = null;
+  let simulationError: string | null = null;
+  try {
+    simulation = await simulateTransaction(txParams, networkId);
+  } catch (err) {
+    simulationError = err instanceof Error ? err.message : String(err);
+    console.warn(`[debug] Tenderly simulation failed: ${simulationError}. Falling back to receipt-only analysis.`);
+    onStep?.('Tenderly unavailable — building fallback from on-chain data...');
+  }
+
+  // Full-sim path unavailable → degrade to receipt-log analysis
+  // but STILL run the LLM agent with simulation=null so it produces a narrative
+  // from what we have (synthetic call tree + receipt-derived token flows + semantic actions).
+  if (!simulation) {
+    const base = await buildFallbackAnalysis(txHash, networkId, txParams, simulationError ?? 'unknown');
+    onStep?.('Running AI agent in fallback mode (simulation unavailable)...');
+    try {
+      const agentResult = await runAnalysisAgent(
+        {
+          txHash,
+          networkId: Number(networkId),
+          success: base.success,
+          gasUsed: base.gasUsed,
+          blockNumber: base.blockNumber,
+          callTree: base.callTree,
+          simulation: null,
+          txParams,
+          tokenFlows: base.tokenFlows,
+          semanticActions: base.semanticActions,
+          riskFlags: base.riskFlags,
+          failureReason: base.failureReason,
+        },
+        onAgentProgress,
+      );
+      const result: AnalysisResult = {
+        ...base,
+        // Agent may enrich these; keep its versions
+        tokenFlows: agentResult.tokenFlows.length ? agentResult.tokenFlows : base.tokenFlows,
+        semanticActions: agentResult.semanticActions.length ? agentResult.semanticActions : base.semanticActions,
+        riskFlags: mergeUniqueRiskFlags(base.riskFlags, agentResult.riskFlags),
+        failureReason: agentResult.failureReason ?? base.failureReason,
+        llmExplanation: agentResult.llmExplanation,
+        addressLabels: { ...base.addressLabels, ...(agentResult.llmAddressLabels ?? {}) },
+      };
+      setCached(txHash, networkId, result);
+      return result;
+    } catch (err) {
+      const agentError = err instanceof Error ? err.message : String(err);
+      console.warn(`[debug] AI agent failed in fallback mode: ${agentError}. Returning receipt-only result.`);
+      const result: AnalysisResult = {
+        ...base,
+        riskFlags: [
+          ...base.riskFlags,
+          {
+            level: 'low' as const,
+            type: 'AI_AGENT_UNAVAILABLE',
+            description: `AI narrative generation failed: ${agentError}. Receipt-decoded data is still available.`,
+          },
+        ],
+      };
+      setCached(txHash, networkId, result);
+      return result;
+    }
+  }
+
   const txInfo = simulation.transaction.transaction_info;
 
   onStep?.('Normalizing call trace...');
   const callTree = normalizeCallTrace(txInfo.call_trace);
 
+  // ── LLM agent (graceful fallback) ────────────────────────────────────────
   onStep?.('Starting AI agent...');
-  const agentResult = await runAnalysisAgent(
-    {
+  let agentResult: Awaited<ReturnType<typeof runAnalysisAgent>> | null = null;
+  let agentError: string | null = null;
+  try {
+    agentResult = await runAnalysisAgent(
+      {
+        txHash,
+        networkId: Number(networkId),
+        success: txParams.onChainStatus,
+        gasUsed: txParams.gasUsed,
+        blockNumber: txParams.blockNumber,
+        callTree,
+        simulation,
+        txParams,
+        tokenFlows: [],
+        semanticActions: [],
+        riskFlags: [],
+        failureReason: undefined,
+      },
+      onAgentProgress,
+    );
+  } catch (err) {
+    agentError = err instanceof Error ? err.message : String(err);
+    console.warn(`[debug] AI agent failed: ${agentError}. Returning simulation-only result.`);
+    onStep?.('AI agent unavailable — returning simulation results without narrative.');
+  }
+
+  let partial;
+  let extraRisk: AnalysisResult['riskFlags'] = [];
+  let llmAddressLabels: Record<string, string> = {};
+
+  if (agentResult) {
+    partial = {
       txHash,
-      networkId: Number(networkId),
+      networkId,
+      success: agentResult.success,
+      gasUsed: agentResult.gasUsed,
+      blockNumber: agentResult.blockNumber,
+      callTree: agentResult.callTree,
+      tokenFlows: agentResult.tokenFlows,
+      semanticActions: agentResult.semanticActions,
+      riskFlags: agentResult.riskFlags,
+      failureReason: agentResult.failureReason,
+      llmExplanation: agentResult.llmExplanation,
+    };
+    llmAddressLabels = agentResult.llmAddressLabels ?? {};
+  } else {
+    extraRisk = [{
+      level: 'low',
+      type: 'AI_AGENT_UNAVAILABLE',
+      description: `AI narrative generation failed: ${agentError ?? 'unknown'}. Call tree and simulation data are available; high-level summary is not.`,
+    }];
+    partial = {
+      txHash,
+      networkId,
       success: txParams.onChainStatus,
       gasUsed: txParams.gasUsed,
       blockNumber: txParams.blockNumber,
       callTree,
-      simulation,
-      txParams,
       tokenFlows: [],
       semanticActions: [],
-      riskFlags: [],
+      riskFlags: extraRisk,
       failureReason: undefined,
-    },
-    onAgentProgress,
-  );
-
-  const partial = {
-    txHash,
-    networkId,
-    success: agentResult.success,
-    gasUsed: agentResult.gasUsed,
-    blockNumber: agentResult.blockNumber,
-    callTree: agentResult.callTree,
-    tokenFlows: agentResult.tokenFlows,
-    semanticActions: agentResult.semanticActions,
-    riskFlags: agentResult.riskFlags,
-    failureReason: agentResult.failureReason,
-    llmExplanation: agentResult.llmExplanation,
-  };
+      llmExplanation: '',
+    };
+  }
   const result: AnalysisResult = {
     ...partial,
-    addressLabels: { ...buildAddressLabels(partial), ...(agentResult.llmAddressLabels ?? {}) },
+    addressLabels: { ...buildAddressLabels(partial), ...llmAddressLabels },
     analyzedAt: new Date().toISOString(),
   };
 
@@ -420,6 +590,12 @@ debugRouter.get('/stream', async (req: Request, res: Response) => {
     res.write(`data: ${JSON.stringify(data)}\n\n`);
   }
 
+  // Send SSE heartbeats every 10s to prevent Cloudflare/proxy idle timeouts.
+  // Must be real data events (not SSE comments) so Cloudflare resets its idle timer.
+  const heartbeat = setInterval(() => {
+    try { send({ type: 'heartbeat' }); } catch { /* connection closed */ }
+  }, 10_000);
+
   try {
     send({ type: 'step', message: `Detected network: ${networkId}` });
     const result = await runPipeline(
@@ -437,9 +613,11 @@ debugRouter.get('/stream', async (req: Request, res: Response) => {
       },
     );
 
+    clearInterval(heartbeat);
     send({ type: 'complete', result });
     res.end();
   } catch (err) {
+    clearInterval(heartbeat);
     send({ type: 'error', message: err instanceof Error ? err.message : String(err) });
     res.end();
   }

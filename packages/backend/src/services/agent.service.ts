@@ -50,7 +50,12 @@ export interface AgentState {
   gasUsed: number;
   blockNumber: number;
   callTree: NormalizedCall;
-  simulation: TenderlySimulateResponse;
+  /**
+   * Tenderly simulation response. `null` means simulation was unavailable
+   * (e.g. Tenderly timeout) and the agent should work from pre-populated
+   * `tokenFlows` + `semanticActions` derived from the on-chain receipt only.
+   */
+  simulation: TenderlySimulateResponse | null;
   txParams: RawTxParams;
   tokenFlows: TokenFlow[];
   semanticActions: SemanticAction[];
@@ -307,6 +312,19 @@ async function executeTool(
     }
 
     case 'extract_token_flows': {
+      // If simulation is unavailable, fall back to pre-populated tokenFlows
+      // (derived from receipt logs by fallback-analysis.service).
+      if (!state.simulation) {
+        const flows = state.tokenFlows;
+        if (flows.length === 0) return 'No token flows detected (receipt-only analysis — simulation unavailable).';
+        return flows
+          .map(
+            f =>
+              `${f.type}: ${f.formattedAmount} ${f.tokenSymbol} from ${f.from} to ${f.to}` +
+              (f.dollarValue ? ` (~$${f.dollarValue})` : ''),
+          )
+          .join('\n');
+      }
       const txInfo = state.simulation.transaction.transaction_info;
       const flows = extractTokenFlows(txInfo.asset_changes, txInfo.balance_diff);
       state.tokenFlows = flows;
@@ -374,6 +392,11 @@ async function executeTool(
     }
 
     case 'simulate_with_fix': {
+      // Needs a working Tenderly simulator; no point running this when we're
+      // in the receipt-only fallback path.
+      if (!state.simulation) {
+        return 'simulate_with_fix is unavailable — the Tenderly simulator was skipped for this transaction. Work with the receipt data you already have.';
+      }
       const fixType = String(args['fix_type'] ?? '');
 
       if (fixType === 'increase_gas') {
@@ -539,6 +562,21 @@ function buildInitialMessage(
 ): string {
   const status = state.success ? 'SUCCESS ✅' : 'FAILED ❌';
   const network = NETWORK_NAMES[state.networkId] ?? `Network ${state.networkId}`;
+  const isFallback = !state.simulation;
+  const fallbackNote = isFallback
+    ? `
+
+⚠ FALLBACK MODE — Tenderly simulation was unavailable for this transaction.
+The call tree below is synthetic (one top-level entry only). Token flows and
+semantic actions were derived directly from the on-chain receipt logs
+(Transfer/Approval events, ERC-4337 UserOperation events, common swap
+signatures). You will NOT have access to the full internal call trace,
+storage reads/writes, or the ability to simulate fixes. Adapt your analysis
+to what is available: focus on what the visible events tell us about intent
+and outcome. If something cannot be determined without simulation, say so
+explicitly rather than guessing.`
+    : '';
+
   return `Analyze this EVM transaction:
 
 Transaction hash: ${state.txHash}
@@ -547,7 +585,7 @@ Status: ${status}
 From (sender): ${state.txParams.from}
 To (contract): ${state.txParams.to}
 Gas used: ${state.gasUsed.toLocaleString()}
-Block: ${state.blockNumber}
+Block: ${state.blockNumber}${fallbackNote}
 
 ## Pre-analyzed context (do NOT re-call these tools)
 
@@ -566,7 +604,7 @@ ${preAnalyzed.failureText}
 ### Risk flags
 ${preAnalyzed.risksText}
 
-Use your remaining tools (get_call_subtree, get_contract_abi, cast_call, cast_run, simulate_with_fix, get_revert_source_location) only if you need additional detail. Otherwise, write your final analysis directly.`;
+Use your remaining tools (get_call_subtree, get_contract_abi, cast_call, cast_run${isFallback ? '' : ', simulate_with_fix, get_revert_source_location'}) only if you need additional detail. Otherwise, write your final analysis directly.`;
 }
 
 // ─── Log writer ───────────────────────────────────────────────────────────────
@@ -707,9 +745,15 @@ export async function runAnalysisAgent(
   onProgress?.({ type: 'tool_result', turn: 0, toolName: 'get_call_tree', summary: callTreeText.split('\n')[0]?.slice(0, 120) ?? '' });
 
   onProgress?.({ type: 'tool_call', turn: 0, toolNames: ['extract_token_flows'] });
-  const txInfo = state.simulation.transaction.transaction_info;
-  const tokenFlows = extractTokenFlows(txInfo.asset_changes, txInfo.balance_diff);
-  state.tokenFlows = tokenFlows;
+  let tokenFlows: TokenFlow[];
+  if (state.simulation) {
+    const txInfo = state.simulation.transaction.transaction_info;
+    tokenFlows = extractTokenFlows(txInfo.asset_changes, txInfo.balance_diff);
+    state.tokenFlows = tokenFlows;
+  } else {
+    // Fallback: use pre-populated tokenFlows from receipt decoding
+    tokenFlows = state.tokenFlows;
+  }
   const tokenFlowsText = tokenFlows.length
     ? tokenFlows.map(f =>
         `${f.type}: ${f.formattedAmount} ${f.tokenSymbol} from ${f.from} to ${f.to}` +
