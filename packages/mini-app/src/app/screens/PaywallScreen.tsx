@@ -1,57 +1,164 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { Sparkles, Copy, CheckCircle, Loader2, ArrowLeft, Zap } from "lucide-react";
-import { getPaymentInfo, verifyPayment } from "../api";
+import { useTonConnectUI, useTonAddress, useTonConnectModal } from "@tonconnect/ui-react";
+import {
+  Sparkles, CheckCircle, Loader2, ArrowLeft, Zap, Star, Wallet, RefreshCw,
+} from "lucide-react";
+import {
+  getPaymentInfo,
+  verifyTonConnect,
+  createStarsInvoice,
+  activateStars,
+} from "../api";
 import type { PaymentInfo } from "../api";
 import { useApp } from "../store";
+
+type Tab = "ton" | "stars";
+type TonState = "idle" | "connecting" | "sending" | "verifying" | "error";
 
 export function PaywallScreen() {
   const navigate = useNavigate();
   const { dispatch } = useApp();
+  const [tab, setTab] = useState<Tab>("ton");
   const [paymentInfo, setPaymentInfo] = useState<PaymentInfo | null>(null);
-  const [txInput, setTxInput] = useState("");
-  const [verifying, setVerifying] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
+  // TON Connect state
+  const [tonConnectUI] = useTonConnectUI();
+  const { open: openConnectModal } = useTonConnectModal();
+  const userAddress = useTonAddress();
+  const [tonState, setTonState] = useState<TonState>("idle");
+  const [tonError, setTonError] = useState<string | null>(null);
+
+  // Stars state
+  const [starsLoading, setStarsLoading] = useState(false);
+  const [starsError, setStarsError] = useState<string | null>(null);
+
+  // Success
   const [success, setSuccess] = useState(false);
-  const [copied, setCopied] = useState<"address" | "memo" | null>(null);
 
   useEffect(() => {
     getPaymentInfo().then(setPaymentInfo);
   }, []);
 
-  const copyToClipboard = async (text: string, field: "address" | "memo") => {
+  const handleSuccess = (status: Parameters<typeof dispatch>[0] extends { type: "SET_SUBSCRIPTION"; status: infer S } ? S : never) => {
+    dispatch({ type: "SET_SUBSCRIPTION", status });
+    setSuccess(true);
+    setTimeout(() => navigate("/"), 2000);
+  };
+
+  // ─── TON Connect payment ──────────────────────────────────────────────────
+
+  const handleTonPay = async () => {
+    if (!paymentInfo) return;
+    setTonError(null);
+
+    if (!userAddress) {
+      setTonState("connecting");
+      openConnectModal();
+      return;
+    }
+
+    setTonState("sending");
     try {
-      await navigator.clipboard.writeText(text);
-      setCopied(field);
-      setTimeout(() => setCopied(null), 2000);
-    } catch {
-      // fallback — select text
+      const amountNano = String(Math.round(paymentInfo.amountTon * 1e9));
+      // Encode memo as a TON cell text comment (prefixed with 0x00000000 op)
+      const memoBytes = new TextEncoder().encode(paymentInfo.memo);
+      const prefix = new Uint8Array(4); // 4-byte zero prefix = text comment op
+      const payload = new Uint8Array(prefix.length + memoBytes.length);
+      payload.set(prefix, 0);
+      payload.set(memoBytes, 4);
+      const payloadBase64 = btoa(String.fromCharCode(...payload));
+
+      await tonConnectUI.sendTransaction({
+        validUntil: Math.floor(Date.now() / 1000) + 600,
+        messages: [{
+          address: paymentInfo.walletAddress,
+          amount: amountNano,
+          payload: payloadBase64,
+        }],
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("cancel") || msg.includes("reject") || msg.includes("User")) {
+        setTonState("idle");
+      } else {
+        setTonError(msg);
+        setTonState("error");
+      }
+      return;
     }
-  };
 
-  const handleVerify = async () => {
-    if (!txInput.trim() || verifying) return;
-    setVerifying(true);
-    setError(null);
-
-    const result = await verifyPayment(txInput.trim());
-    setVerifying(false);
-
+    // Transaction sent — backend polls TonAPI
+    setTonState("verifying");
+    const result = await verifyTonConnect(userAddress);
     if (result.success && result.status) {
-      setSuccess(true);
-      dispatch({ type: "SET_SUBSCRIPTION", status: result.status });
-      setTimeout(() => navigate("/"), 2000);
+      handleSuccess(result.status);
     } else {
-      setError(result.error ?? "Verification failed. Please try again.");
+      setTonError(result.error ?? "Verification failed. Please try again.");
+      setTonState("error");
     }
   };
+
+  const tonButtonLabel = () => {
+    if (!userAddress) return "Connect Wallet";
+    switch (tonState) {
+      case "connecting": return "Connecting…";
+      case "sending": return "Confirm in wallet…";
+      case "verifying": return "Verifying payment…";
+      default: return `Pay ${paymentInfo?.amountTon ?? 3} TON`;
+    }
+  };
+
+  const isTonBusy = tonState === "connecting" || tonState === "sending" || tonState === "verifying";
+
+  // ─── Telegram Stars payment ───────────────────────────────────────────────
+
+  const handleStarsPay = async () => {
+    setStarsLoading(true);
+    setStarsError(null);
+
+    const invoice = await createStarsInvoice();
+    if (!invoice) {
+      setStarsError("Stars payments are not available right now.");
+      setStarsLoading(false);
+      return;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tg = (window as any).Telegram?.WebApp;
+    if (!tg?.openInvoice) {
+      setStarsError("Telegram Stars are only available inside the Telegram app.");
+      setStarsLoading(false);
+      return;
+    }
+
+    tg.openInvoice(invoice.invoiceUrl, async (status: string) => {
+      setStarsLoading(false);
+      if (status === "paid") {
+        const result = await activateStars(invoice.payload);
+        if (result.success && result.status) {
+          handleSuccess(result.status);
+        } else {
+          setStarsError(result.error ?? "Activation failed after payment.");
+        }
+      } else if (status === "cancelled") {
+        // user cancelled — do nothing
+      } else {
+        setStarsError(`Payment ${status}. Please try again.`);
+      }
+    });
+  };
+
+  // ─── Render ───────────────────────────────────────────────────────────────
 
   if (success) {
     return (
       <div className="h-screen bg-[#0F1117] flex flex-col items-center justify-center px-6 gap-4">
         <CheckCircle className="w-16 h-16 text-green-400" />
         <h2 className="text-white text-xl font-semibold">You're on Pro!</h2>
-        <p className="text-[#8B8E96] text-sm text-center">Unlimited analyses for 30 days. Redirecting...</p>
+        <p className="text-[#8B8E96] text-sm text-center">
+          Unlimited analyses for 30 days. Redirecting…
+        </p>
       </div>
     );
   }
@@ -79,116 +186,154 @@ export function PaywallScreen() {
             <Zap className="w-7 h-7 text-[#0098EA]" />
           </div>
           <h1 className="text-white text-xl font-semibold mb-1">Upgrade to Pro</h1>
-          <p className="text-[#8B8E96] text-sm">You've used all 5 free analyses today.</p>
+          <p className="text-[#8B8E96] text-sm">
+            {paymentInfo
+              ? `You've used your free analyses today.`
+              : "Unlimited analyses · No daily limits"}
+          </p>
           <div className="mt-3 inline-flex items-baseline gap-1">
             <span className="text-white text-3xl font-bold">$9</span>
             <span className="text-[#8B8E96] text-sm">/ month</span>
           </div>
-          <p className="text-[#0098EA] text-sm mt-1">Paid in TON · Unlimited analyses</p>
+          <p className="text-[#0098EA] text-sm mt-1">30 days · Unlimited analyses</p>
         </div>
 
-        {/* Steps */}
-        {paymentInfo && paymentInfo.configured ? (
+        {/* Tabs */}
+        <div className="flex bg-[#1A1D27] border border-[#2A2D37] rounded-xl p-1 mb-4">
+          <button
+            onClick={() => setTab("ton")}
+            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${
+              tab === "ton"
+                ? "bg-[#0098EA] text-white"
+                : "text-[#8B8E96] hover:text-white"
+            }`}
+          >
+            <Wallet className="w-4 h-4" />
+            TON Connect
+          </button>
+          <button
+            onClick={() => setTab("stars")}
+            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${
+              tab === "stars"
+                ? "bg-[#0098EA] text-white"
+                : "text-[#8B8E96] hover:text-white"
+            }`}
+          >
+            <Star className="w-4 h-4" />
+            Telegram Stars
+          </button>
+        </div>
+
+        {/* ── TON Connect tab ──────────────────────────────────────────────── */}
+        {tab === "ton" && (
           <div className="space-y-3">
-            {/* Step 1 */}
-            <div className="bg-[#1A1D27] border border-[#2A2D37] rounded-2xl p-4">
-              <p className="text-[#8B8E96] text-xs font-medium uppercase tracking-wide mb-3">
-                Step 1 — Copy your memo
-              </p>
-              <p className="text-[#8B8E96] text-xs mb-2">
-                This links the payment to your account. Must be included exactly as shown.
-              </p>
-              <div className="flex items-center gap-2 bg-[#0F1117] rounded-xl px-3 py-2.5">
-                <span className="text-[#0098EA] font-mono text-sm flex-1 select-all">
-                  {paymentInfo.memo}
-                </span>
-                <button
-                  onClick={() => copyToClipboard(paymentInfo.memo, "memo")}
-                  className="text-[#8B8E96] hover:text-white transition-colors flex-shrink-0"
-                >
-                  {copied === "memo" ? (
-                    <CheckCircle className="w-4 h-4 text-green-400" />
-                  ) : (
-                    <Copy className="w-4 h-4" />
+            {paymentInfo?.configured ? (
+              <>
+                <div className="bg-[#1A1D27] border border-[#2A2D37] rounded-2xl p-4 space-y-2">
+                  <p className="text-[#8B8E96] text-xs">
+                    Connects to Tonkeeper, TON Space, or any TON wallet.
+                    The transaction includes your unique memo automatically.
+                  </p>
+                  {userAddress && (
+                    <div className="flex items-center gap-2 bg-[#0F1117] rounded-xl px-3 py-2">
+                      <div className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" />
+                      <span className="text-[#8B8E96] text-xs font-mono truncate">
+                        {userAddress.slice(0, 8)}…{userAddress.slice(-6)}
+                      </span>
+                      <button
+                        onClick={() => tonConnectUI.disconnect()}
+                        className="ml-auto text-[#555] hover:text-[#8B8E96] text-xs transition-colors"
+                      >
+                        Disconnect
+                      </button>
+                    </div>
                   )}
-                </button>
-              </div>
-            </div>
+                </div>
 
-            {/* Step 2 */}
-            <div className="bg-[#1A1D27] border border-[#2A2D37] rounded-2xl p-4">
-              <p className="text-[#8B8E96] text-xs font-medium uppercase tracking-wide mb-3">
-                Step 2 — Send {paymentInfo.amountTon} TON
-              </p>
-              <p className="text-[#8B8E96] text-xs mb-2">
-                Send exactly {paymentInfo.amountTon} TON to this address with the memo above as the comment.
-              </p>
-              <div className="flex items-center gap-2 bg-[#0F1117] rounded-xl px-3 py-2.5">
-                <span className="text-white font-mono text-xs flex-1 break-all select-all">
-                  {paymentInfo.walletAddress}
-                </span>
-                <button
-                  onClick={() => copyToClipboard(paymentInfo.walletAddress, "address")}
-                  className="text-[#8B8E96] hover:text-white transition-colors flex-shrink-0 ml-1"
-                >
-                  {copied === "address" ? (
-                    <CheckCircle className="w-4 h-4 text-green-400" />
-                  ) : (
-                    <Copy className="w-4 h-4" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* Step 3 */}
-            <div className="bg-[#1A1D27] border border-[#2A2D37] rounded-2xl p-4">
-              <p className="text-[#8B8E96] text-xs font-medium uppercase tracking-wide mb-3">
-                Step 3 — Paste your transaction hash
-              </p>
-              <p className="text-[#8B8E96] text-xs mb-3">
-                After sending, copy the transaction hash from your TON wallet and paste it here.
-              </p>
-              <div className={`bg-[#0F1117] border rounded-xl px-3 py-2.5 flex items-center gap-2 transition-colors ${error ? "border-red-500/60" : "border-[#2A2D37] focus-within:border-[#3A3D47]"}`}>
-                <input
-                  type="text"
-                  value={txInput}
-                  onChange={(e) => { setTxInput(e.target.value); setError(null); }}
-                  placeholder="Paste TON tx hash..."
-                  className="flex-1 bg-transparent text-white text-sm placeholder:text-[#555] focus:outline-none font-mono"
-                  disabled={verifying}
-                  onKeyDown={(e) => { if (e.key === "Enter") handleVerify(); }}
-                />
-              </div>
-              {error && (
-                <p className="text-red-400/80 text-xs mt-2">{error}</p>
-              )}
-              <button
-                onClick={handleVerify}
-                disabled={!txInput.trim() || verifying}
-                className="w-full mt-3 bg-[#0098EA] hover:bg-[#0088D4] disabled:opacity-30 disabled:bg-[#2A2D37] text-white text-sm font-medium rounded-xl py-3 transition-all flex items-center justify-center gap-2"
-              >
-                {verifying ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Verifying...
-                  </>
-                ) : (
-                  "Activate Pro"
+                {tonError && (
+                  <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2.5">
+                    <p className="text-red-400/90 text-xs flex-1">{tonError}</p>
+                    <button onClick={() => { setTonError(null); setTonState("idle"); }}>
+                      <RefreshCw className="w-3.5 h-3.5 text-red-400/60 mt-0.5" />
+                    </button>
+                  </div>
                 )}
-              </button>
-            </div>
 
-            <p className="text-[#555] text-xs text-center pt-1">
-              Subscription is valid for {paymentInfo.durationDays} days · No auto-renewal
-            </p>
-          </div>
-        ) : (
-          <div className="bg-[#1A1D27] border border-[#2A2D37] rounded-2xl p-6 text-center">
-            <p className="text-[#8B8E96] text-sm">
-              TON payments are not yet configured. Please check back soon.
-            </p>
+                <button
+                  onClick={handleTonPay}
+                  disabled={isTonBusy}
+                  className="w-full bg-[#0098EA] hover:bg-[#0088D4] disabled:opacity-50 disabled:bg-[#2A2D37] text-white text-sm font-medium rounded-xl py-3.5 transition-all flex items-center justify-center gap-2"
+                >
+                  {isTonBusy ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : userAddress ? (
+                    <Wallet className="w-4 h-4" />
+                  ) : null}
+                  {tonButtonLabel()}
+                </button>
+
+                {tonState === "verifying" && (
+                  <p className="text-[#8B8E96] text-xs text-center">
+                    Waiting for on-chain confirmation… this takes ~15 seconds.
+                  </p>
+                )}
+              </>
+            ) : (
+              <div className="bg-[#1A1D27] border border-[#2A2D37] rounded-2xl p-6 text-center">
+                <p className="text-[#8B8E96] text-sm">
+                  TON payments are not configured yet. Please check back soon.
+                </p>
+              </div>
+            )}
           </div>
         )}
+
+        {/* ── Telegram Stars tab ────────────────────────────────────────────── */}
+        {tab === "stars" && (
+          <div className="space-y-3">
+            <div className="bg-[#1A1D27] border border-[#2A2D37] rounded-2xl p-4 space-y-2">
+              <p className="text-[#8B8E96] text-xs">
+                Pay directly with your Telegram Stars balance. No wallet needed —
+                works on any device.
+              </p>
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-[#8B8E96] text-sm">Price</span>
+                <div className="flex items-center gap-1.5">
+                  <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
+                  <span className="text-white font-semibold">
+                    {paymentInfo?.starsPrice ?? 500} Stars
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {starsError && (
+              <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2.5">
+                <p className="text-red-400/90 text-xs flex-1">{starsError}</p>
+                <button onClick={() => setStarsError(null)}>
+                  <RefreshCw className="w-3.5 h-3.5 text-red-400/60 mt-0.5" />
+                </button>
+              </div>
+            )}
+
+            <button
+              onClick={handleStarsPay}
+              disabled={starsLoading}
+              className="w-full bg-[#FFB800] hover:bg-[#FFA800] disabled:opacity-50 text-black text-sm font-semibold rounded-xl py-3.5 transition-all flex items-center justify-center gap-2"
+            >
+              {starsLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Star className="w-4 h-4 fill-black" />
+              )}
+              {starsLoading ? "Opening…" : "Pay with Telegram Stars"}
+            </button>
+          </div>
+        )}
+
+        <p className="text-[#555] text-xs text-center pt-4">
+          {paymentInfo?.durationDays ?? 30} days · No auto-renewal
+        </p>
       </div>
     </div>
   );

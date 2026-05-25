@@ -191,6 +191,52 @@ export async function verifyPayment(
   }
 }
 
+/** Called after TON Connect sendTransaction — backend polls TonAPI to find the TX */
+export async function verifyTonConnect(
+  senderAddress: string,
+): Promise<{ success: boolean; error?: string; status?: UsageStatus }> {
+  try {
+    const res = await fetch(`${API_BASE}/api/subscription/verify-ton-connect`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ senderAddress }),
+    });
+    return (await res.json()) as { success: boolean; error?: string; status?: UsageStatus };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Verification failed' };
+  }
+}
+
+/** Create a Telegram Stars invoice link */
+export async function createStarsInvoice(): Promise<{ invoiceUrl: string; payload: string } | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/subscription/create-stars-invoice`, {
+      method: 'POST',
+      headers: authHeaders(),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as { invoiceUrl: string; payload: string };
+  } catch {
+    return null;
+  }
+}
+
+/** Activate Pro after Stars payment confirmed by WebApp.openInvoice callback */
+export async function activateStars(
+  payload: string,
+): Promise<{ success: boolean; error?: string; status?: UsageStatus }> {
+  try {
+    const res = await fetch(`${API_BASE}/api/subscription/activate-stars`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ payload }),
+    });
+    return (await res.json()) as { success: boolean; error?: string; status?: UsageStatus };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Activation failed' };
+  }
+}
+
 export async function askQuestion(
   question: string,
   context?: AnalysisResult,
