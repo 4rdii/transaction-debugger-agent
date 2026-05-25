@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { AnalysisResult } from './api';
+import type { AnalysisResult, UsageStatus } from './api';
 
 export interface HistoryEntry {
   txHash: string;
@@ -12,18 +12,21 @@ export interface HistoryEntry {
 export interface AppState {
   history: HistoryEntry[];
   currentResult: AnalysisResult | null;
+  subscription: UsageStatus | null;
 }
 
 export const initialState: AppState = {
   history: [],
   currentResult: null,
+  subscription: null,
 };
 
 export type AppAction =
   | { type: 'SET_RESULT'; result: AnalysisResult }
   | { type: 'CLEAR_RESULT' }
   | { type: 'ADD_HISTORY'; entry: HistoryEntry }
-  | { type: 'LOAD_HISTORY'; entries: HistoryEntry[] };
+  | { type: 'LOAD_HISTORY'; entries: HistoryEntry[] }
+  | { type: 'SET_SUBSCRIPTION'; status: UsageStatus };
 
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
@@ -35,6 +38,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, history: [action.entry, ...state.history].slice(0, 50) };
     case 'LOAD_HISTORY':
       return { ...state, history: action.entries };
+    case 'SET_SUBSCRIPTION':
+      return { ...state, subscription: action.status };
     default:
       return state;
   }

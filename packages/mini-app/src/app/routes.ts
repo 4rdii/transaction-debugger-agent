@@ -2,6 +2,7 @@ import { createBrowserRouter } from "react-router";
 import { ChatScreen } from "./screens/ChatScreen";
 import { HistoryScreen } from "./screens/HistoryScreen";
 import { RiskDetailScreen } from "./screens/RiskDetailScreen";
+import { PaywallScreen } from "./screens/PaywallScreen";
 
 export const router = createBrowserRouter([
   {
@@ -19,5 +20,9 @@ export const router = createBrowserRouter([
   {
     path: "/risk/:txHash",
     Component: RiskDetailScreen,
+  },
+  {
+    path: "/upgrade",
+    Component: PaywallScreen,
   },
 ]);
