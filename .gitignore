@@ -9,6 +9,9 @@ logs/
 # Compiled TypeScript output in backend src (build artifacts, not source)
 packages/backend/src/**/*.js
 packages/backend/src/**/*.d.ts
+# Compiled TypeScript output in frontend src (build artifacts, not source)
+packages/frontend/src/**/*.js
+packages/frontend/src/**/*.d.ts
 tx-debugger.tar.gz
 docs/screenshots/*
 .vercel/

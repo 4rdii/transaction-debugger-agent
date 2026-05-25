@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router";
-import { ArrowUp, History, Loader2, Sparkles, Zap } from "lucide-react";
+import { ArrowUp, History, Loader2, Plus, Sparkles, Zap } from "lucide-react";
 import { AnalysisResultCard } from "../components/AnalysisResultCard";
 import { TONFeaturesPanel } from "../components/TONFeaturesPanel";
 import { useApp } from "../store";
@@ -15,6 +15,9 @@ type Message = {
   analysis?: AnalysisResult;
 };
 
+// Free accounts may ask this many follow-up questions per analyzed transaction.
+const FREE_FOLLOWUP_LIMIT = 1;
+
 export function ChatScreen() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -22,6 +25,8 @@ export function ChatScreen() {
   const [input, setInput] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
+  // Follow-up questions asked since the current transaction was analyzed.
+  const [followupCount, setFollowupCount] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<(() => void) | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -88,6 +93,22 @@ export function ChatScreen() {
       return;
     }
 
+    // Free accounts: cap follow-up questions per transaction.
+    const isFollowup = hasAnalysis && !isTxHash(text);
+    if (isFollowup && followupLimitReached) {
+      setInput("");
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          type: "agent",
+          content:
+            "Free accounts include 1 follow-up question per transaction. Upgrade to Pro for unlimited follow-ups, or start a new transaction below.",
+        },
+      ]);
+      return;
+    }
+
     const userMsg: Message = { id: Date.now().toString(), type: "user", content: text };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
@@ -95,6 +116,7 @@ export function ChatScreen() {
 
     if (isTxHash(text)) {
       const txHash = text;
+      setFollowupCount(0); // new transaction resets the follow-up allowance
       const statusId = (Date.now() + 1).toString();
       setMessages((prev) => [
         ...prev,
@@ -166,6 +188,7 @@ export function ChatScreen() {
 
       askQuestion(text, state.currentResult ?? undefined)
         .then((answer) => {
+          setFollowupCount((c) => c + 1); // count only successfully answered follow-ups
           setMessages((prev) => [
             ...prev.filter((m) => m.id !== statusId),
             { id: (Date.now() + 2).toString(), type: "agent", content: answer },
@@ -185,12 +208,26 @@ export function ChatScreen() {
     }
   };
 
+  // Reset the conversation to start a fresh transaction without reloading.
+  const handleNewTransaction = () => {
+    cancelRef.current?.();
+    cancelRef.current = null;
+    setMessages([]);
+    setInput("");
+    setFollowupCount(0);
+    setIsAnalyzing(false);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
   const hasMessages = messages.length > 0;
   const hasAnalysis = messages.some((m) => m.type === "agent" && m.analysis);
   const [hashError, setHashError] = useState(false);
 
   const sub = state.subscription;
   const showUsage = sub && !sub.isPro;
+  // Treat anyone not confirmed Pro as free (subscription status may be absent).
+  const isFree = !sub?.isPro;
+  const followupLimitReached = isFree && hasAnalysis && followupCount >= FREE_FOLLOWUP_LIMIT;
   const usageLabel = showUsage
     ? `${sub.remaining ?? 0} / ${sub.limit ?? 5} free`
     : null;
@@ -287,6 +324,15 @@ export function ChatScreen() {
       {/* Input Bar — ChatGPT style */}
       <div className="flex-shrink-0 px-4 pb-4 pt-2">
         <div className="max-w-[600px] mx-auto relative">
+          {hasAnalysis && (
+            <button
+              onClick={handleNewTransaction}
+              className="w-full mb-2 flex items-center justify-center gap-1.5 bg-[#1A1D27] border border-[#2A2D37] rounded-xl py-2 text-[#8B8E96] text-[13px] hover:border-[#0098EA]/40 hover:text-white transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              New transaction
+            </button>
+          )}
           <div className={`bg-[#1A1D27] border rounded-2xl px-4 py-3 flex items-end gap-2 transition-colors ${hashError ? "border-red-500/60" : "border-[#2A2D37] focus-within:border-[#3A3D47]"}`}>
             <textarea
               ref={inputRef}
@@ -298,7 +344,13 @@ export function ChatScreen() {
                   handleSend();
                 }
               }}
-              placeholder={hasAnalysis ? "Ask a follow-up question..." : "Paste a transaction hash..."}
+              placeholder={
+                followupLimitReached
+                  ? "Paste a new transaction hash..."
+                  : hasAnalysis
+                    ? "Ask a follow-up question..."
+                    : "Paste a transaction hash..."
+              }
               rows={1}
               className="flex-1 bg-transparent text-white text-[14px] placeholder:text-[#555] focus:outline-none resize-none leading-6 min-h-[24px] max-h-[120px]"
               disabled={isAnalyzing}
@@ -318,6 +370,16 @@ export function ChatScreen() {
           {hashError ? (
             <p className="text-red-400/80 text-[11px] text-center mt-2">
               Please paste a valid transaction hash to start.
+            </p>
+          ) : followupLimitReached ? (
+            <p className="text-[#8B8E96] text-[11px] text-center mt-2">
+              Free plan: 1 follow-up per transaction.{" "}
+              <button
+                onClick={() => navigate("/upgrade")}
+                className="text-[#0098EA] hover:underline"
+              >
+                Upgrade for unlimited
+              </button>
             </p>
           ) : (
             <p className="text-[#555] text-[11px] text-center mt-2">
