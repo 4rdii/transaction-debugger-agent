@@ -131,6 +131,66 @@ export function networkLabel(networkId: string): string {
   return NETWORK_LABELS[networkId] ?? networkId;
 }
 
+// ─── Subscription ─────────────────────────────────────────────────────────────
+
+export interface UsageStatus {
+  plan: 'free' | 'pro';
+  isPro: boolean;
+  used: number;
+  remaining: number | null;
+  limit: number | null;
+  proExpiresAt?: string;
+  allowed: boolean;
+}
+
+export interface PaymentInfo {
+  walletAddress: string;
+  amountTon: number;
+  memo: string;
+  durationDays: number;
+  priceUsd: number;
+  configured: boolean;
+}
+
+export async function getSubscriptionStatus(): Promise<UsageStatus | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/subscription/status`, {
+      headers: authHeaders(),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as UsageStatus;
+  } catch {
+    return null;
+  }
+}
+
+export async function getPaymentInfo(): Promise<PaymentInfo | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/subscription/payment-info`, {
+      headers: authHeaders(),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as PaymentInfo;
+  } catch {
+    return null;
+  }
+}
+
+export async function verifyPayment(
+  txHash: string,
+): Promise<{ success: boolean; error?: string; status?: UsageStatus }> {
+  try {
+    const res = await fetch(`${API_BASE}/api/subscription/verify-payment`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ txHash }),
+    });
+    return (await res.json()) as { success: boolean; error?: string; status?: UsageStatus };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Verification failed' };
+  }
+}
+
 export async function askQuestion(
   question: string,
   context?: AnalysisResult,
@@ -149,13 +209,15 @@ export async function askQuestion(
 }
 
 export interface SSEEvent {
-  type: 'step' | 'tool_call' | 'tool_result' | 'complete' | 'error';
+  type: 'step' | 'tool_call' | 'tool_result' | 'complete' | 'error' | 'paywall';
   message?: string;
   result?: AnalysisResult;
   turn?: number;
   toolNames?: string[];
   toolName?: string;
   summary?: string;
+  used?: number;
+  limit?: number;
 }
 
 /**
@@ -183,8 +245,18 @@ export function streamAnalysis(
       });
 
       if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        onEvent({ type: 'error', message: text || `HTTP ${res.status}` });
+        if (res.status === 429) {
+          // Limit reached — emit paywall event so UI can redirect
+          try {
+            const body = await res.json() as { used?: number; limit?: number };
+            onEvent({ type: 'paywall', used: body.used, limit: body.limit });
+          } catch {
+            onEvent({ type: 'paywall' });
+          }
+        } else {
+          const text = await res.text().catch(() => '');
+          onEvent({ type: 'error', message: text || `HTTP ${res.status}` });
+        }
         return;
       }
 

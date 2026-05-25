@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router";
-import { ArrowUp, History, Loader2, Sparkles } from "lucide-react";
+import { ArrowUp, History, Loader2, Sparkles, Zap } from "lucide-react";
 import { AnalysisResultCard } from "../components/AnalysisResultCard";
 import { TONFeaturesPanel } from "../components/TONFeaturesPanel";
 import { useApp } from "../store";
-import { streamAnalysis, askQuestion } from "../api";
+import { streamAnalysis, askQuestion, getSubscriptionStatus } from "../api";
 import type { AnalysisResult } from "../api";
 import type { HistoryEntry } from "../store";
 
@@ -25,6 +25,13 @@ export function ChatScreen() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<(() => void) | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Load subscription status on mount (for usage counter in header)
+  useEffect(() => {
+    getSubscriptionStatus().then((status) => {
+      if (status) dispatch({ type: "SET_SUBSCRIPTION", status });
+    });
+  }, [dispatch]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -74,6 +81,13 @@ export function ChatScreen() {
     if (!input.trim() || isAnalyzing) return;
     const text = input.trim();
 
+    // Before any analysis exists, only accept tx hashes
+    if (!hasAnalysis && !isTxHash(text)) {
+      setHashError(true);
+      setTimeout(() => setHashError(false), 1500);
+      return;
+    }
+
     const userMsg: Message = { id: Date.now().toString(), type: "user", content: text };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
@@ -121,7 +135,15 @@ export function ChatScreen() {
               result: event.result!,
             },
           });
+          // Refresh subscription usage counter after successful analysis
+          getSubscriptionStatus().then((status) => {
+            if (status) dispatch({ type: "SET_SUBSCRIPTION", status });
+          });
           setIsAnalyzing(false);
+        } else if (event.type === "paywall") {
+          setMessages((prev) => prev.filter((m) => m.id !== statusId));
+          setIsAnalyzing(false);
+          navigate("/upgrade");
         } else if (event.type === "error") {
           setMessages((prev) => [
             ...prev.filter((m) => m.id !== statusId),
@@ -164,6 +186,14 @@ export function ChatScreen() {
   };
 
   const hasMessages = messages.length > 0;
+  const hasAnalysis = messages.some((m) => m.type === "agent" && m.analysis);
+  const [hashError, setHashError] = useState(false);
+
+  const sub = state.subscription;
+  const showUsage = sub && !sub.isPro;
+  const usageLabel = showUsage
+    ? `${sub.remaining ?? 0} / ${sub.limit ?? 5} free`
+    : null;
 
   return (
     <div className="h-screen bg-[#0F1117] flex flex-col">
@@ -174,42 +204,41 @@ export function ChatScreen() {
           <span className="text-white font-medium text-[15px]">Explorai</span>
         </div>
 
-        <button
-          onClick={() => navigate("/history")}
-          className="w-8 h-8 flex items-center justify-center text-[#8B8E96] hover:text-white transition-colors"
-        >
-          <History className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-2">
+          {usageLabel && (
+            <button
+              onClick={() => navigate("/upgrade")}
+              className="flex items-center gap-1.5 bg-[#1A1D27] border border-[#2A2D37] rounded-lg px-2.5 py-1 hover:border-[#0098EA]/40 transition-colors"
+            >
+              <Zap className="w-3 h-3 text-[#0098EA]" />
+              <span className="text-[#8B8E96] text-[12px]">{usageLabel}</span>
+            </button>
+          )}
+          {sub?.isPro && (
+            <span className="flex items-center gap-1 bg-[#0098EA]/10 border border-[#0098EA]/30 rounded-lg px-2.5 py-1">
+              <Zap className="w-3 h-3 text-[#0098EA]" />
+              <span className="text-[#0098EA] text-[12px] font-medium">Pro</span>
+            </span>
+          )}
+          <button
+            onClick={() => navigate("/history")}
+            className="w-8 h-8 flex items-center justify-center text-[#8B8E96] hover:text-white transition-colors"
+          >
+            <History className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden">
         {!hasMessages ? (
-          /* Empty State — centered like ChatGPT */
+          /* Empty State */
           <div className="h-full flex flex-col items-center justify-center px-6">
             <Sparkles className="w-10 h-10 text-[#0098EA]/60 mb-4" />
-            <h2 className="text-white text-[18px] font-medium mb-2">What can I help with?</h2>
-            <p className="text-[#8B8E96] text-[14px] text-center mb-8 max-w-[280px]">
-              Paste a transaction hash to analyze, or ask anything about blockchain transactions.
+            <h2 className="text-white text-[18px] font-medium mb-2">Paste a transaction hash</h2>
+            <p className="text-[#8B8E96] text-[14px] text-center max-w-[280px]">
+              Supports TON, EVM (14 chains), and Solana. Network is auto-detected.
             </p>
-            <div className="w-full max-w-[340px] grid grid-cols-2 gap-2">
-              <SuggestionChip
-                label="Analyze a swap"
-                onClick={() => {}}
-              />
-              <SuggestionChip
-                label="Check risks"
-                onClick={() => {}}
-              />
-              <SuggestionChip
-                label="Token flows"
-                onClick={() => {}}
-              />
-              <SuggestionChip
-                label="What is MEV?"
-                onClick={() => setInput("What is MEV?")}
-              />
-            </div>
           </div>
         ) : (
           /* Conversation */
@@ -258,18 +287,18 @@ export function ChatScreen() {
       {/* Input Bar — ChatGPT style */}
       <div className="flex-shrink-0 px-4 pb-4 pt-2">
         <div className="max-w-[600px] mx-auto relative">
-          <div className="bg-[#1A1D27] border border-[#2A2D37] rounded-2xl px-4 py-3 flex items-end gap-2 focus-within:border-[#3A3D47] transition-colors">
+          <div className={`bg-[#1A1D27] border rounded-2xl px-4 py-3 flex items-end gap-2 transition-colors ${hashError ? "border-red-500/60" : "border-[#2A2D37] focus-within:border-[#3A3D47]"}`}>
             <textarea
               ref={inputRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => { setInput(e.target.value); setHashError(false); }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   handleSend();
                 }
               }}
-              placeholder="Paste tx hash or ask a question..."
+              placeholder={hasAnalysis ? "Ask a follow-up question..." : "Paste a transaction hash..."}
               rows={1}
               className="flex-1 bg-transparent text-white text-[14px] placeholder:text-[#555] focus:outline-none resize-none leading-6 min-h-[24px] max-h-[120px]"
               disabled={isAnalyzing}
@@ -286,22 +315,18 @@ export function ChatScreen() {
               )}
             </button>
           </div>
-          <p className="text-[#555] text-[11px] text-center mt-2">
-            Explorai can make mistakes. Verify important information.
-          </p>
+          {hashError ? (
+            <p className="text-red-400/80 text-[11px] text-center mt-2">
+              Please paste a valid transaction hash to start.
+            </p>
+          ) : (
+            <p className="text-[#555] text-[11px] text-center mt-2">
+              Explorai can make mistakes. Verify important information.
+            </p>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function SuggestionChip({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className="border border-[#2A2D37] rounded-xl px-3 py-2.5 text-[#8B8E96] text-[13px] hover:border-[#3A3D47] hover:text-white transition-colors text-left"
-    >
-      {label}
-    </button>
-  );
-}

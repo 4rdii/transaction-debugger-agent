@@ -32,6 +32,7 @@ import { fetchTonTransaction } from '../services/ton-rpc.service.js';
 import { normalizeTonTransaction } from '../services/ton-normalizer.service.js';
 import { runTonAnalysisAgent } from '../services/ton-agent.service.js';
 import { trackAnalysis } from '../services/usage.service.js';
+import { getUsageStatus, incrementFreeCount } from '../services/subscription.service.js';
 import type { AnalysisResult, NormalizedCall } from '@debugger/shared';
 
 export const debugRouter = Router();
@@ -575,9 +576,19 @@ debugRouter.get('/stream', async (req: Request, res: Response) => {
     }
   }
 
-  // Track usage
+  // Enforce daily limit for authenticated users
   if (req.telegramUser) {
-    trackAnalysis(req.telegramUser.id, req.telegramUser.firstName, req.telegramUser.username, txHash);
+    const usageStatus = getUsageStatus(req.telegramUser.id);
+    if (!usageStatus.allowed) {
+      res.status(429).json({
+        error: 'DAILY_LIMIT_REACHED',
+        message: `You've used all ${usageStatus.limit} free analyses today. Upgrade to Pro for unlimited access.`,
+        used: usageStatus.used,
+        limit: usageStatus.limit,
+        remaining: 0,
+      });
+      return;
+    }
   }
 
   // SSE headers
@@ -614,6 +625,13 @@ debugRouter.get('/stream', async (req: Request, res: Response) => {
     );
 
     clearInterval(heartbeat);
+
+    // Increment daily count and admin stats after successful analysis
+    if (req.telegramUser) {
+      incrementFreeCount(req.telegramUser.id);
+      trackAnalysis(req.telegramUser.id, req.telegramUser.firstName, req.telegramUser.username, txHash);
+    }
+
     send({ type: 'complete', result });
     res.end();
   } catch (err) {
