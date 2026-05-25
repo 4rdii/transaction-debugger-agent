@@ -61,20 +61,13 @@ export function PaywallScreen() {
     setTonState("sending");
     try {
       const amountNano = String(Math.round(paymentInfo.amountTon * 1e9));
-      // Encode memo as a TON cell text comment (prefixed with 0x00000000 op)
-      const memoBytes = new TextEncoder().encode(paymentInfo.memo);
-      const prefix = new Uint8Array(4); // 4-byte zero prefix = text comment op
-      const payload = new Uint8Array(prefix.length + memoBytes.length);
-      payload.set(prefix, 0);
-      payload.set(memoBytes, 4);
-      const payloadBase64 = btoa(String.fromCharCode(...payload));
-
+      // Plain TON transfer — no payload needed. Backend matches by sender
+      // wallet address + destination + amount, so memo is not required here.
       await tonConnectUI.sendTransaction({
         validUntil: Math.floor(Date.now() / 1000) + 600,
         messages: [{
           address: paymentInfo.walletAddress,
           amount: amountNano,
-          payload: payloadBase64,
         }],
       });
     } catch (err) {

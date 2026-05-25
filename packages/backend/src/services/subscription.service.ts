@@ -218,7 +218,6 @@ export async function verifyTonConnectPayment(
 
   const baseUrl = getTonApiBaseUrl('ton-mainnet');
   const headers = { Accept: 'application/json', ...getTonApiHeaders() };
-  const expectedMemo = `explorai_${userId}`;
   const minNano = TON_SUBSCRIPTION_PRICE_TON * 1e9 * 0.99;
 
   // Poll up to 5 times: 3s, 6s, 10s, 15s, 20s after call
@@ -246,15 +245,9 @@ export async function verifyTonConnectPayment(
         });
         if (!outMsg) continue;
 
-        const comment = String(outMsg.decoded_body?.['text'] ?? '');
-        if (comment !== expectedMemo) {
-          return {
-            success: false,
-            error: `Wrong memo in transaction. Expected "${expectedMemo}", got "${comment || '(empty)'}".`,
-          };
-        }
-
-        // Prevent double-use
+        // TON Connect sends a plain transfer (no memo) — we match by
+        // sender address + destination + amount, which is sufficient.
+        // Prevent double-use by txHash.
         const record = getRecord(userId);
         if (record.verifiedTxHashes.includes(tx.hash)) {
           return { success: false, error: 'This transaction was already used.' };
