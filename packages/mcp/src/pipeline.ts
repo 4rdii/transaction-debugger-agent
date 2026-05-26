@@ -308,15 +308,16 @@ export async function getCallTree(
   return normalizeCallTrace(simulation.transaction.transaction_info.call_trace);
 }
 
-// ── Granular: token flows only ───────────────────────────────────────
+// ── Granular: token flows only (no LLM) ──────────────────────────────
 
 export async function getTokenFlows(
   txHash: string,
   networkId: string,
 ): Promise<TokenFlow[]> {
   if (isSolanaNetwork(networkId)) {
-    const result = await debugTransaction(txHash, networkId);
-    return result.tokenFlows;
+    // Use NoLLM path — fetch + extract directly, no agent call
+    const txData = await fetchSolanaTransaction(txHash, networkId);
+    return extractSolanaTokenFlows(txData);
   }
   if (isTonNetwork(networkId)) {
     const txData = await fetchTonTransaction(txHash, networkId);
@@ -329,19 +330,25 @@ export async function getTokenFlows(
   return extractTokenFlows(txInfo.asset_changes, txInfo.balance_diff);
 }
 
-// ── Granular: risk flags only ────────────────────────────────────────
+// ── Granular: risk flags only (no LLM) ───────────────────────────────
 
 export async function getRiskFlags(
   txHash: string,
   networkId: string,
 ): Promise<RiskFlag[]> {
   if (isSolanaNetwork(networkId)) {
-    const result = await debugTransaction(txHash, networkId);
-    return result.riskFlags;
+    // Use NoLLM path — fetch + extract + detect directly
+    const txData = await fetchSolanaTransaction(txHash, networkId);
+    const callTree = normalizeSolanaTransaction(txData);
+    const tokenFlows = extractSolanaTokenFlows(txData);
+    return detectRisks(callTree, tokenFlows, []);
   }
   if (isTonNetwork(networkId)) {
-    const result = await debugTransaction(txHash, networkId);
-    return result.riskFlags;
+    // Use NoLLM path
+    const txData = await fetchTonTransaction(txHash, networkId);
+    const callTree = normalizeTonTransaction(txData);
+    const tokenFlows = extractTonTokenFlows(txData);
+    return detectRisks(callTree, tokenFlows, []);
   }
 
   const txParams = await fetchTxParams(txHash, networkId);
@@ -350,4 +357,24 @@ export async function getRiskFlags(
   const callTree = normalizeCallTrace(txInfo.call_trace);
   const tokenFlows = extractTokenFlows(txInfo.asset_changes, txInfo.balance_diff);
   return detectRisks(callTree, tokenFlows, []);
+}
+
+// ── Simulate-with-fix wrapper (no LLM) ───────────────────────────────
+
+export { getContractAbi, getContractSource } from '../../backend/src/services/etherscan.service.js';
+export { castCall, castRun } from '../../backend/src/services/foundry.service.js';
+export type { FixResult } from '../../backend/src/services/simulate-fix.service.js';
+
+import { simulateWithFix } from '../../backend/src/services/simulate-fix.service.js';
+
+export async function simulateFixForTx(
+  txHash: string,
+  networkId: string,
+  fix:
+    | { type: 'increase_gas'; multiplier?: number }
+    | { type: 'set_eth_balance'; amountEth?: number }
+    | { type: 'set_erc20_allowance'; tokenAddress: string; spender: string; mappingSlot?: number },
+): Promise<import('../../backend/src/services/simulate-fix.service.js').FixResult> {
+  const txParams = await fetchTxParams(txHash, networkId);
+  return simulateWithFix(txParams, networkId, fix);
 }
