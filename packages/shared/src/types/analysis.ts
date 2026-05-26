@@ -23,6 +23,12 @@ export interface NormalizedCall {
   valueWei: string;
   success: boolean;
   revertReason?: string;
+  /** Raw hex return data from a failed call (e.g. "0x08c379a0..." for Error(string) or a custom error selector). */
+  rawRevertData?: string;
+  /** 4-byte custom error selector decoded from rawRevertData when no string reason is available. */
+  customErrorSelector?: string;
+  /** Raw calldata for the failing call — useful when the target is unverified. */
+  callInput?: string;
   protocol?: string;
   action?: string;
   children: NormalizedCall[];

@@ -66,29 +66,48 @@ export function analyzeFailure(callTree: NormalizedCall): FailureReason | undefi
   if (callTree.success) return undefined;
 
   const allCalls = flattenCalls(callTree);
-  const failedCalls = allCalls.filter(c => !c.success && c.revertReason);
+  // Include calls with no reason string too — they may have raw revert data
+  const failedCalls = allCalls.filter(c => !c.success);
+  const failedWithReason = failedCalls.filter(c => c.revertReason);
 
-  if (failedCalls.length === 0) {
+  if (failedWithReason.length === 0 && failedCalls.length === 0) {
     return {
       rootCallId: callTree.id,
-      reason: callTree.revertReason ?? 'Unknown revert',
+      reason: 'Unknown revert',
       explanation: 'The transaction reverted without a decodable reason string.',
     };
   }
 
-  // Find the last failed leaf — a call that reverted but none of its children reverted.
-  // Search from the end so we pick the latest in flattened order.
+  // Find the deepest failed leaf — a call that reverted with no reverted children.
+  const candidates = failedWithReason.length > 0 ? failedWithReason : failedCalls;
   let rootCause: NormalizedCall | undefined;
-  for (let i = failedCalls.length - 1; i >= 0; i--) {
-    if (failedCalls[i]!.children.every(child => child.success)) {
-      rootCause = failedCalls[i];
+  for (let i = candidates.length - 1; i >= 0; i--) {
+    if (candidates[i]!.children.every(child => child.success)) {
+      rootCause = candidates[i];
       break;
     }
   }
-  rootCause ??= failedCalls[failedCalls.length - 1]!;
+  rootCause ??= candidates[candidates.length - 1]!;
+
+  const reason = rootCause.revertReason ?? 'execution reverted';
+  const explanation = buildExplanation(reason, rootCause);
+
+  // Append raw revert context for unverified/no-reason calls
+  const rawContext: string[] = [];
+  if (rootCause.customErrorSelector) {
+    rawContext.push(`Custom error selector: ${rootCause.customErrorSelector} (contract ${rootCause.callee} is unverified — look up this 4-byte selector at https://www.4byte.directory/signatures/?bytes4_signature=${rootCause.customErrorSelector})`);
+  }
+  if (rootCause.rawRevertData && !rootCause.customErrorSelector) {
+    rawContext.push(`Raw revert bytes: ${rootCause.rawRevertData}`);
+  }
+  if (rootCause.callInput && !rootCause.functionName) {
+    rawContext.push(`Failing calldata: ${rootCause.callInput.slice(0, 138)}${rootCause.callInput.length > 138 ? '…' : ''}`);
+    rawContext.push(`Target (unverified): ${rootCause.callee}`);
+  }
+
   return {
     rootCallId: rootCause.id,
-    reason: rootCause.revertReason!,
-    explanation: buildExplanation(rootCause.revertReason!, rootCause),
+    reason,
+    explanation: rawContext.length > 0 ? `${explanation}\n${rawContext.join('\n')}` : explanation,
   };
 }

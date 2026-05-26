@@ -2,9 +2,9 @@
 # Single-stage: install deps, install Foundry, build, run.
 # Frontend is deployed separately to Vercel.
 
-FROM node:20-alpine
+FROM node:20-slim
 
-RUN apk add --no-cache curl bash git
+RUN apt-get update && apt-get install -y --no-install-recommends curl bash git ca-certificates && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

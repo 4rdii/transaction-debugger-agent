@@ -1,4 +1,4 @@
-import type { TenderlySimulateResponse } from '@debugger/shared';
+import type { TenderlySimulateResponse, TenderlyTransaction } from '@debugger/shared';
 import { config } from '../config.js';
 import type { RawTxParams } from './ethers.service.js';
 
@@ -32,6 +32,34 @@ async function callSimulate(
   }
 
   return data;
+}
+
+/**
+ * Fetch the trace of an already-mined transaction directly from Tenderly's index.
+ * This is more accurate than re-simulating because it reflects actual on-chain execution.
+ * Returns null if Tenderly hasn't indexed the tx (e.g. unsupported network, very recent block).
+ */
+export async function fetchTransactionTrace(
+  txHash: string,
+  networkId: string,
+): Promise<TenderlyTransaction | null> {
+  const { accountSlug, projectSlug, accessKey } = config.tenderly;
+  const url = `${BASE_URL}/account/${accountSlug}/project/${projectSlug}/network/${networkId}/transaction/${txHash}`;
+
+  const response = await fetch(url, {
+    headers: { 'X-Access-Key': accessKey },
+    signal: AbortSignal.timeout(30_000),
+  });
+
+  if (response.status === 404 || response.status === 400) return null;
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Tenderly trace API error ${response.status}: ${text}`);
+  }
+
+  const data = (await response.json()) as { transaction: TenderlyTransaction };
+  return data.transaction ?? null;
 }
 
 export async function simulateTransaction(

@@ -10,7 +10,7 @@ import { isSolanaNetwork, isTonNetwork } from '../config.js';
 
 // EVM services
 import { fetchTxParams } from '../services/ethers.service.js';
-import { simulateTransaction } from '../services/tenderly.service.js';
+import { fetchTransactionTrace, simulateTransaction } from '../services/tenderly.service.js';
 import { normalizeCallTrace } from '../services/normalizer.service.js';
 import { extractTokenFlows } from '../services/tokenflow.service.js';
 import { detectSemanticActions } from '../services/action.service.js';
@@ -75,14 +75,24 @@ mcpRouter.post('/raw', async (req: Request, res: Response, next: NextFunction) =
       result = { txHash, networkId, success: txData.success, gasUsed: Number(txData.fee), blockNumber: Number(txData.lt), callTree, tokenFlows, semanticActions, riskFlags, failureReason };
     } else {
       const txParams = await fetchTxParams(txHash, networkId);
-      const simulation = await simulateTransaction(txParams, networkId);
-      const txInfo = simulation.transaction.transaction_info;
+
+      // Try the direct trace endpoint first — it uses actual on-chain execution data
+      // (more accurate decoded params, labels, logs). Fall back to simulation if not indexed.
+      let txInfo: import('@debugger/shared').TenderlyTransactionInfo;
+      const tracedTx = await fetchTransactionTrace(txHash, networkId);
+      if (tracedTx) {
+        txInfo = tracedTx.transaction_info;
+      } else {
+        const simulation = await simulateTransaction(txParams, networkId);
+        txInfo = simulation.transaction.transaction_info;
+      }
+
       const callTree = normalizeCallTrace(txInfo.call_trace);
       const tokenFlows = extractTokenFlows(txInfo.asset_changes, txInfo.balance_diff);
       const semanticActions = detectSemanticActions(callTree, tokenFlows);
       const failureReason = txParams.onChainStatus ? undefined : analyzeFailure(callTree);
       const riskFlags = detectRisks(callTree, tokenFlows, semanticActions);
-      result = { txHash, networkId, success: txParams.onChainStatus, gasUsed: txParams.gasUsed, blockNumber: txParams.blockNumber, callTree, tokenFlows, semanticActions, riskFlags, failureReason };
+      result = { txHash, networkId, success: txParams.onChainStatus, gasUsed: txParams.gasUsed, blockNumber: txParams.blockNumber, callTree, tokenFlows, semanticActions, riskFlags, failureReason, stackTrace: txInfo.stack_trace ?? [] };
     }
 
     res.json({ result });
@@ -110,8 +120,11 @@ mcpRouter.post('/call-subtree', async (req: Request, res: Response, next: NextFu
       callTree = normalizeTonTransaction(txData);
     } else {
       const txParams = await fetchTxParams(txHash, networkId);
-      const simulation = await simulateTransaction(txParams, networkId);
-      callTree = normalizeCallTrace(simulation.transaction.transaction_info.call_trace);
+      const tracedTx = await fetchTransactionTrace(txHash, networkId);
+      const traceData = tracedTx
+        ? tracedTx.transaction_info
+        : (await simulateTransaction(txParams, networkId)).transaction.transaction_info;
+      callTree = normalizeCallTrace(traceData.call_trace);
     }
 
     const node = findCallById(callTree, callId);
