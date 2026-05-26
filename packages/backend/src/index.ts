@@ -7,6 +7,7 @@ import { debugRouter } from './routes/debug.route.js';
 import { qaRouter } from './routes/qa.route.js';
 import { rangoRouter } from './routes/rango.route.js';
 import { subscriptionRouter } from './routes/subscription.route.js';
+import { mcpRouter } from './routes/mcp.route.js';
 import { errorHandler } from './middleware/error.middleware.js';
 import { requireTelegramAuth, optionalTelegramAuth } from './middleware/telegram-auth.middleware.js';
 import { getUsageStats } from './services/usage.service.js';
@@ -55,6 +56,7 @@ app.use('/api/debug', debugLimiter, optionalTelegramAuth, debugRouter);
 app.use('/api/qa', qaLimiter, optionalTelegramAuth, qaRouter);
 app.use('/api/rango', debugLimiter, optionalTelegramAuth, rangoRouter);
 app.use('/api/subscription', subscriptionRouter);
+app.use('/api/mcp', debugLimiter, mcpRouter);
 
 // Global error handler (must be last)
 app.use(errorHandler);
