@@ -175,7 +175,7 @@ const OPTIONAL_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
           address: { type: 'string', description: 'Contract address (0x...)' },
           networkId: {
             type: 'number',
-            description: 'Network ID (1=Ethereum, 56=BSC, 137=Polygon, 10=Optimism, 42161=Arbitrum, 8453=Base, 43114=Avalanche, 59144=Linea, 324=zkSync, 81457=Blast, 534352=Scroll, 250=Fantom, 100=Gnosis, 80094=Berachain)',
+            description: 'Network ID (1=Ethereum, 56=BSC, 137=Polygon, 10=Optimism, 42161=Arbitrum, 8453=Base, 43114=Avalanche, 59144=Linea, 324=zkSync, 81457=Blast, 534352=Scroll, 250=Fantom, 100=Gnosis, 80094=Berachain, 999=HyperEVM)',
           },
         },
         required: ['address', 'networkId'],
@@ -548,6 +548,7 @@ const NETWORK_NAMES: Record<number, string> = {
   80094:  'Berachain',
   81457:  'Blast',
   534352: 'Scroll',
+  999:    'HyperEVM',
 };
 
 function buildInitialMessage(

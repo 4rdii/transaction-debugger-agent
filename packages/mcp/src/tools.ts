@@ -102,7 +102,7 @@ function formatDebugData(data: DebugData): string {
   sections.push(`Transaction: ${data.txHash}`);
   sections.push(`Network: ${data.networkId}`);
   sections.push(`Status: ${data.success ? 'SUCCESS' : 'FAILED'}`);
-  sections.push(`Gas used: ${data.gasUsed.toLocaleString()}`);
+  sections.push(`Gas used: ${(data.gasUsed ?? 0).toLocaleString()}`);
   sections.push(`Block: ${data.blockNumber}`);
   sections.push('');
 
@@ -192,7 +192,7 @@ export function registerTools(server: McpServer): void {
       'Supported networks:',
       '  EVM:    "1" (Ethereum) "56" (BSC) "137" (Polygon) "10" (Optimism) "42161" (Arbitrum)',
       '          "8453" (Base) "43114" (Avalanche) "59144" (Linea) "324" (zkSync) "81457" (Blast)',
-      '          "534352" (Scroll) "250" (Fantom) "100" (Gnosis) "80094" (Berachain)',
+      '          "534352" (Scroll) "250" (Fantom) "100" (Gnosis) "80094" (Berachain) "999" (HyperEVM)',
       '  Solana: "solana-mainnet" "solana-devnet"',
       '  TON:    "ton-mainnet" "ton-testnet"',
       '',
@@ -406,7 +406,7 @@ export function registerTools(server: McpServer): void {
       'Returns a list of all public functions with their signatures.',
       'Use when you encounter an unrecognised contract to understand what it does.',
       'EVM only. Supported chains: Ethereum, Polygon, Arbitrum, Base, BSC, Optimism,',
-      'Avalanche, Linea, zkSync, Blast, Scroll, Fantom, Gnosis, Berachain.',
+      'Avalanche, Linea, zkSync, Blast, Scroll, Fantom, Gnosis, Berachain, HyperEVM.',
     ].join('\n'),
     {
       address: z.string().describe('Contract address (0x...)'),

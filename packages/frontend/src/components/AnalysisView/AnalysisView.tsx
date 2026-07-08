@@ -18,7 +18,7 @@ const NETWORK_LABELS: Record<string, string> = {
   '1': 'Ethereum', '137': 'Polygon', '42161': 'Arbitrum One', '10': 'Optimism',
   '8453': 'Base', '59144': 'Linea', '56': 'BNB Smart Chain', '43114': 'Avalanche',
   '324': 'zkSync Era', '81457': 'Blast', '534352': 'Scroll', '250': 'Fantom',
-  '100': 'Gnosis', '80094': 'Berachain',
+  '100': 'Gnosis', '80094': 'Berachain', '999': 'HyperEVM',
   'solana-mainnet': 'Solana', 'solana-devnet': 'Solana Devnet',
   'ton-mainnet': 'TON', 'ton-testnet': 'TON Testnet',
 };

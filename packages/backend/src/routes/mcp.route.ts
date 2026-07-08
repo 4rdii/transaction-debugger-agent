@@ -19,6 +19,7 @@ import { detectRisks } from '../services/risk.service.js';
 import { getContractAbi, getContractSource } from '../services/etherscan.service.js';
 import { castCall, castRun } from '../services/foundry.service.js';
 import { simulateWithFix } from '../services/simulate-fix.service.js';
+import { buildFallbackAnalysis } from '../services/fallback-analysis.service.js';
 
 // Solana services
 import { fetchSolanaTransaction } from '../services/solana-rpc.service.js';
@@ -72,27 +73,41 @@ mcpRouter.post('/raw', async (req: Request, res: Response, next: NextFunction) =
       const semanticActions = detectSemanticActions(callTree, tokenFlows);
       const failureReason = txData.success ? undefined : analyzeFailure(callTree);
       const riskFlags = detectRisks(callTree, tokenFlows, semanticActions);
-      result = { txHash, networkId, success: txData.success, gasUsed: Number(txData.fee), blockNumber: Number(txData.lt), callTree, tokenFlows, semanticActions, riskFlags, failureReason };
+      result = { txHash, networkId, success: txData.success, gasUsed: Number(txData.fee) || 0, blockNumber: Number(txData.lt) || 0, callTree, tokenFlows, semanticActions, riskFlags, failureReason };
     } else {
       const txParams = await fetchTxParams(txHash, networkId);
 
       // Try the direct trace endpoint first — it uses actual on-chain execution data
-      // (more accurate decoded params, labels, logs). Fall back to simulation if not indexed.
-      let txInfo: import('@debugger/shared').TenderlyTransactionInfo;
-      const tracedTx = await fetchTransactionTrace(txHash, networkId);
-      if (tracedTx) {
-        txInfo = tracedTx.transaction_info;
-      } else {
-        const simulation = await simulateTransaction(txParams, networkId);
-        txInfo = simulation.transaction.transaction_info;
+      // (more accurate decoded params, labels, logs). Fall back to simulation if not indexed,
+      // then all the way down to receipt-only analysis if Tenderly doesn't support this chain
+      // at all (e.g. HyperEVM — confirmed 2026-07-08 Tenderly returns a hard 500 for chain 999,
+      // not the usual 404/400 "not indexed" case fetchTransactionTrace already handles).
+      let txInfo: import('@debugger/shared').TenderlyTransactionInfo | null = null;
+      let tenderlyError: string | null = null;
+      try {
+        const tracedTx = await fetchTransactionTrace(txHash, networkId);
+        if (tracedTx) {
+          txInfo = tracedTx.transaction_info;
+        } else {
+          const simulation = await simulateTransaction(txParams, networkId);
+          txInfo = simulation.transaction.transaction_info;
+        }
+      } catch (err) {
+        tenderlyError = err instanceof Error ? err.message : String(err);
+        console.warn(`[mcp] Tenderly unavailable for network ${networkId}: ${tenderlyError}. Falling back to receipt-only analysis.`);
       }
 
-      const callTree = normalizeCallTrace(txInfo.call_trace);
-      const tokenFlows = extractTokenFlows(txInfo.asset_changes, txInfo.balance_diff);
-      const semanticActions = detectSemanticActions(callTree, tokenFlows);
-      const failureReason = txParams.onChainStatus ? undefined : analyzeFailure(callTree);
-      const riskFlags = detectRisks(callTree, tokenFlows, semanticActions);
-      result = { txHash, networkId, success: txParams.onChainStatus, gasUsed: txParams.gasUsed, blockNumber: txParams.blockNumber, callTree, tokenFlows, semanticActions, riskFlags, failureReason, stackTrace: txInfo.stack_trace ?? [] };
+      if (txInfo) {
+        const callTree = normalizeCallTrace(txInfo.call_trace);
+        const tokenFlows = extractTokenFlows(txInfo.asset_changes, txInfo.balance_diff);
+        const semanticActions = detectSemanticActions(callTree, tokenFlows);
+        const failureReason = txParams.onChainStatus ? undefined : analyzeFailure(callTree);
+        const riskFlags = detectRisks(callTree, tokenFlows, semanticActions);
+        result = { txHash, networkId, success: txParams.onChainStatus, gasUsed: txParams.gasUsed, blockNumber: txParams.blockNumber, callTree, tokenFlows, semanticActions, riskFlags, failureReason, stackTrace: txInfo.stack_trace ?? [] };
+      } else {
+        const fallback = await buildFallbackAnalysis(txHash, networkId, txParams, tenderlyError ?? 'Tenderly unavailable');
+        result = { ...fallback, stackTrace: [], fallbackReason: tenderlyError ?? 'Tenderly unavailable for this network' };
+      }
     }
 
     res.json({ result });
@@ -120,11 +135,18 @@ mcpRouter.post('/call-subtree', async (req: Request, res: Response, next: NextFu
       callTree = normalizeTonTransaction(txData);
     } else {
       const txParams = await fetchTxParams(txHash, networkId);
-      const tracedTx = await fetchTransactionTrace(txHash, networkId);
-      const traceData = tracedTx
-        ? tracedTx.transaction_info
-        : (await simulateTransaction(txParams, networkId)).transaction.transaction_info;
-      callTree = normalizeCallTrace(traceData.call_trace);
+      try {
+        const tracedTx = await fetchTransactionTrace(txHash, networkId);
+        const traceData = tracedTx
+          ? tracedTx.transaction_info
+          : (await simulateTransaction(txParams, networkId)).transaction.transaction_info;
+        callTree = normalizeCallTrace(traceData.call_trace);
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        console.warn(`[mcp] Tenderly unavailable for network ${networkId}: ${reason}. Falling back to receipt-only call tree.`);
+        const fallback = await buildFallbackAnalysis(txHash, networkId, txParams, reason);
+        callTree = fallback.callTree;
+      }
     }
 
     const node = findCallById(callTree, callId);

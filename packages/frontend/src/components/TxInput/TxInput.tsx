@@ -19,6 +19,7 @@ const NETWORKS = [
   { id: '100', label: 'Gnosis' },
   { id: '80094', label: 'Berachain' },
   { id: '42220', label: 'Celo' },
+  { id: '999', label: 'HyperEVM' },
   { id: 'solana-mainnet', label: 'Solana' },
   { id: 'solana-devnet', label: 'Solana Devnet' },
   { id: 'ton-mainnet', label: 'TON' },

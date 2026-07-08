@@ -21,6 +21,7 @@ const RANGO_CHAIN_TO_NETWORK_ID: Record<string, string> = {
   GNOSIS: '100',
   BERACHAIN: '80094',
   CELO: '42220',
+  HYPEREVM: '999',
   SOLANA: 'solana-mainnet',
   TON: 'ton-mainnet',
 };

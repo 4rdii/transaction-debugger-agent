@@ -77,6 +77,11 @@ export const config = {
     '250':    rpc('250',    null, 'https://rpc.ftm.tools'),
     '100':    rpc('100',    null, 'https://rpc.gnosischain.com'),
     '80094':  rpc('80094',  null, 'https://rpc.berachain.com'),
+    // Alchemy subdomain exists (hyperliquid-mainnet) but requires manually
+    // enabling the network per-app in the Alchemy dashboard — not done for
+    // our app yet (confirmed via a live 403 "network not enabled" error
+    // 2026-07-08), so force the public RPC until/unless that's turned on.
+    '999':    rpc('999',    null, 'https://rpc.hyperliquid.xyz/evm'),
   } as Record<string, string>,
 };
 
